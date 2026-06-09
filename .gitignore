@@ -1,0 +1,37 @@
+# Claude Code
+.claude/
+
+# Build output
+build/
+app/build/
+*.apk
+*.aab
+*.aar
+
+# Gradle
+.gradle/
+gradle/wrapper/gradle-wrapper.jar
+local.properties
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+captures/
+.externalNativeBuild/
+.cxx/
+.kotlin/
+
+# Android keystore
+*.jks
+*.keystore
+
+# macOS
+.DS_Store
+
+# Logs / temp
+*.log
+resume.txt
+google-tv-live-tab-mit-joyn-zattoo-titel.jpg
