@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: app/build/reports/lint/lint-results.sarif
         continue-on-error: true   # SARIF upload requires Advanced Security; skip gracefully on free repos
