@@ -37,13 +37,6 @@ sealed class SearchResult {
     data class ProgramMatch(val program: Program, val channel: Channel) : SearchResult()
 }
 
-val SEARCH_KB = listOf(
-    listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"),
-    listOf("A", "S", "D", "F", "G", "H", "J", "K", "L", "⌫"),
-    listOf("Z", "X", "C", "V", "B", "N", "M", ".", "_", "✓"),
-    listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
-)
-
 // homeFocusSection values
 const val HOME_SECTION_CARDS = 0
 const val HOME_SECTION_FILTER = 1
@@ -70,9 +63,6 @@ data class PlayerUiState(
     val filterTab: Int = FILTER_ALL,
     val nowPlayingCardIndex: Int = 0,
     val searchQuery: String = "",
-    val searchKbRow: Int = 0,
-    val searchKbCol: Int = 0,
-    val searchInResults: Boolean = false,
     val searchResultIndex: Int = 0,
     val searchResults: List<SearchResult> = emptyList()
 ) {
@@ -472,103 +462,36 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleSearchKeys(keyCode: Int, state: PlayerUiState): Boolean {
-        val kbRows = SEARCH_KB.size
-        return when {
-            !state.searchInResults -> when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP -> {
-                    if (state.searchKbRow > 0) {
-                        val newRow = state.searchKbRow - 1
-                        val newCol = state.searchKbCol.coerceAtMost(SEARCH_KB[newRow].size - 1)
-                        _uiState.value = state.copy(searchKbRow = newRow, searchKbCol = newCol)
-                    } else if (state.searchResults.isNotEmpty()) {
-                        _uiState.value = state.copy(searchInResults = true, searchResultIndex = 0)
-                    }
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (state.searchKbRow < kbRows - 1) {
-                        val newRow = state.searchKbRow + 1
-                        val newCol = state.searchKbCol.coerceAtMost(SEARCH_KB[newRow].size - 1)
-                        _uiState.value = state.copy(searchKbRow = newRow, searchKbCol = newCol)
-                    }
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    if (state.searchKbCol > 0) {
-                        _uiState.value = state.copy(searchKbCol = state.searchKbCol - 1)
-                    } else if (state.searchResults.isNotEmpty()) {
-                        _uiState.value = state.copy(searchInResults = true, searchResultIndex = 0)
-                    }
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    val maxCol = SEARCH_KB[state.searchKbRow].size - 1
-                    if (state.searchKbCol < maxCol) {
-                        _uiState.value = state.copy(searchKbCol = state.searchKbCol + 1)
-                    }
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    typeSearchKey(state.searchKbRow, state.searchKbCol, state); true
-                }
-                else -> false
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                if (state.searchResultIndex > 0)
+                    _uiState.value = state.copy(searchResultIndex = state.searchResultIndex - 1)
+                true
             }
-            else -> when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP -> {
-                    if (state.searchResultIndex > 0) {
-                        _uiState.value = state.copy(searchResultIndex = state.searchResultIndex - 1)
-                    } else {
-                        _uiState.value = state.copy(searchInResults = false)
-                    }
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    val maxIdx = state.searchResults.size - 1
-                    if (state.searchResultIndex < maxIdx) {
-                        _uiState.value = state.copy(searchResultIndex = state.searchResultIndex + 1)
-                    } else {
-                        _uiState.value = state.copy(searchInResults = false, searchKbRow = 0, searchKbCol = 0)
-                    }
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    _uiState.value = state.copy(searchInResults = false)
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    val result = state.searchResults.getOrNull(state.searchResultIndex) ?: return false
-                    val channelId = when (result) {
-                        is SearchResult.ChannelMatch -> result.channel.id
-                        is SearchResult.ProgramMatch -> result.channel.id
-                    }
-                    val idx = state.channels.indexOfFirst { it.id == channelId }
-                    if (idx >= 0) { clearSearch(); startPlaying(idx) }
-                    true
-                }
-                else -> false
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                if (state.searchResultIndex < state.searchResults.size - 1)
+                    _uiState.value = state.copy(searchResultIndex = state.searchResultIndex + 1)
+                true
             }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                val result = state.searchResults.getOrNull(state.searchResultIndex) ?: return false
+                val channelId = when (result) {
+                    is SearchResult.ChannelMatch -> result.channel.id
+                    is SearchResult.ProgramMatch -> result.channel.id
+                }
+                val idx = state.channels.indexOfFirst { it.id == channelId }
+                if (idx >= 0) { clearSearch(); startPlaying(idx) }
+                true
+            }
+            else -> false
         }
     }
 
-    private fun typeSearchKey(row: Int, col: Int, state: PlayerUiState) {
-        val key = SEARCH_KB[row][col]
-        if (key == "✓") {
-            if (state.searchResults.isNotEmpty()) {
-                _uiState.value = state.copy(searchInResults = true, searchResultIndex = 0)
-            }
-            return
-        }
-        val char = when (key) {
-            "⌫" -> null
-            "_" -> " "
-            else -> key
-        }
-        val newQuery = if (char == null) state.searchQuery.dropLast(1) else state.searchQuery + char
-        val results = computeSearchResults(newQuery, state)
-        _uiState.value = state.copy(
-            searchQuery = newQuery,
+    fun updateSearchQuery(query: String) {
+        val results = computeSearchResults(query, _uiState.value)
+        _uiState.value = _uiState.value.copy(
+            searchQuery = query,
             searchResults = results,
-            searchInResults = false,
             searchResultIndex = 0
         )
     }
@@ -596,9 +519,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(
             overlay = Overlay.Search,
             searchQuery = "",
-            searchKbRow = 0,
-            searchKbCol = 0,
-            searchInResults = false,
             searchResultIndex = 0,
             searchResults = emptyList()
         )
@@ -609,7 +529,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             overlay = Overlay.None,
             searchQuery = "",
             searchResults = emptyList(),
-            searchInResults = false,
             searchResultIndex = 0
         )
     }

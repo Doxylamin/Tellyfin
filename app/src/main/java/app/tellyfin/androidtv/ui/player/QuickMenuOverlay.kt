@@ -34,18 +34,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
 import app.tellyfin.androidtv.ui.theme.AppColors
 import java.time.Instant
 
-private data class QuickMenuItem(val icon: String, val label: String, val description: String)
-
-private val MENU_ITEMS_BASE = listOf(
-    QuickMenuItem("★", "Favorite", "Add or remove from favorites"),
-    QuickMenuItem("↺", "Refresh", "Reload stream"),
-    QuickMenuItem("⚙", "Settings", "Bandwidth & preferences")
-)
 
 @Composable
 fun QuickMenuOverlay(
@@ -117,7 +112,7 @@ fun QuickMenuOverlay(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        "Channel ${channel.number}",
+                                        stringResource(R.string.channel_number, channel.number),
                                         color = AppColors.Purple,
                                         fontSize = 12.sp
                                     )
@@ -135,7 +130,7 @@ fun QuickMenuOverlay(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    "${remaining}m remaining",
+                                    stringResource(R.string.minutes_remaining, remaining),
                                     color = Color.White.copy(alpha = 0.30f),
                                     fontSize = 11.sp
                                 )
@@ -158,13 +153,14 @@ fun QuickMenuOverlay(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        MENU_ITEMS_BASE.forEachIndexed { index, item ->
+                        val menuLabels = listOf(
+                            if (isFavorite) stringResource(R.string.menu_remove_favorite)
+                            else stringResource(R.string.menu_add_favorite),
+                            stringResource(R.string.menu_refresh),
+                            stringResource(R.string.menu_settings)
+                        )
+                        menuLabels.forEachIndexed { index, label ->
                             val isFocused = index == highlightedIndex
-                            val label = if (index == 0) {
-                                if (isFavorite) "★  Remove from favorites" else "☆  Add to favorites"
-                            } else {
-                                "${item.icon}  ${item.label}"
-                            }
 
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -207,7 +203,7 @@ fun QuickMenuOverlay(
 
                 // Bottom hint
                 Text(
-                    "↑↓ Navigate  ·  OK Select  ·  ← Close",
+                    stringResource(R.string.quick_menu_hint),
                     color = Color.White.copy(alpha = 0.20f),
                     fontSize = 10.sp,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)

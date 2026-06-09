@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import app.tellyfin.androidtv.data.model.Channel
+import androidx.compose.ui.res.stringResource
+import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.ui.theme.AppColors
 import java.time.Instant
 import java.util.UUID
@@ -95,13 +97,13 @@ fun ChannelListOverlay(
                     modifier = Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 12.dp)
                 ) {
                     Text(
-                        "Channels",
+                        stringResource(R.string.channels),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Text(
-                        "${channels.size} channels  ·  ← schließen  Menu ★",
+                        stringResource(R.string.channel_list_hint, channels.size),
                         fontSize = 11.sp,
                         color = Color.White.copy(alpha = 0.30f)
                     )
@@ -259,7 +261,7 @@ private fun ChannelListRow(
                         .background(AppColors.Purple.copy(alpha = 0.25f), RoundedCornerShape(4.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    Text("NOW", color = AppColors.Purple, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.now_badge), color = AppColors.Purple, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

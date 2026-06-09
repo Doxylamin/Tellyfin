@@ -12,6 +12,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.ui.theme.AppColors
 
 @Composable
@@ -35,7 +37,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             Text(
-                "Settings",
+                stringResource(R.string.settings),
                 color = Color.White,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
@@ -43,7 +45,7 @@ fun SettingsScreen(
             )
 
             Text(
-                "Max Streaming Bandwidth",
+                stringResource(R.string.settings_bandwidth),
                 color = AppColors.OnSurface.copy(alpha = 0.6f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -92,7 +94,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(32.dp))
 
             Text(
-                "Server",
+                stringResource(R.string.settings_server),
                 color = AppColors.OnSurface.copy(alpha = 0.6f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -107,7 +109,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(16.dp))
 
             Text(
-                "Press BACK to close · OK to apply bandwidth",
+                stringResource(R.string.settings_hint),
                 color = AppColors.OnSurface.copy(alpha = 0.35f),
                 fontSize = 11.sp
             )

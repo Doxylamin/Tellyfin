@@ -155,13 +155,11 @@ fun PlayerScreen(
         // Search overlay is accessible from any state
         SearchOverlay(
             query = state.searchQuery,
-            kbRow = state.searchKbRow,
-            kbCol = state.searchKbCol,
-            inResults = state.searchInResults,
             resultIndex = state.searchResultIndex,
             results = state.searchResults,
             favoriteChannelIds = state.favoriteChannelIds,
-            visible = state.overlay is Overlay.Search
+            visible = state.overlay is Overlay.Search,
+            onQueryChange = { viewModel.updateSearchQuery(it) }
         )
     }
 }

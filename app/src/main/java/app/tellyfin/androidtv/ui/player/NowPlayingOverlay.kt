@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
 import app.tellyfin.androidtv.ui.theme.AppColors
@@ -65,7 +67,7 @@ fun NowPlayingOverlay(
                         .background(Color(0xFFCC0000), RoundedCornerShape(4.dp))
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                    Text("LIVE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.live_badge), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
                 Text(
                     channel.name,
@@ -79,7 +81,7 @@ fun NowPlayingOverlay(
                     fontSize = 14.sp
                 )
                 Text(
-                    "Press OK or ← to dismiss",
+                    stringResource(R.string.now_playing_dismiss_hint),
                     color = Color.White.copy(alpha = 0.30f),
                     fontSize = 12.sp
                 )
@@ -89,7 +91,7 @@ fun NowPlayingOverlay(
                 CurrentProgramBlock(program = current, now = now)
             } else {
                 Text(
-                    "No program information available",
+                    stringResource(R.string.no_program_info),
                     color = Color.White.copy(alpha = 0.4f),
                     fontSize = 14.sp
                 )
@@ -109,7 +111,7 @@ fun NowPlayingOverlay(
                     verticalAlignment = Alignment.Top
                 ) {
                     Text(
-                        "Up next",
+                        stringResource(R.string.up_next),
                         color = Color.White.copy(alpha = 0.40f),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -188,7 +190,7 @@ private fun CurrentProgramBlock(program: Program, now: Instant) {
                 trackColor = Color.White.copy(alpha = 0.15f)
             )
             Text(
-                "${remaining}m remaining",
+                stringResource(R.string.minutes_remaining, remaining),
                 color = Color.White.copy(alpha = 0.40f),
                 fontSize = 12.sp
             )
@@ -220,7 +222,7 @@ private fun UpcomingCard(program: Program) {
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            "${program.durationMinutes}min",
+            stringResource(R.string.duration_minutes, program.durationMinutes),
             color = Color.White.copy(alpha = 0.35f),
             fontSize = 11.sp
         )

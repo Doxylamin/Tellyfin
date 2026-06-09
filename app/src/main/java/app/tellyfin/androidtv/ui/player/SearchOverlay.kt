@@ -3,9 +3,6 @@ package app.tellyfin.androidtv.ui.player
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -24,23 +21,35 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
 import app.tellyfin.androidtv.ui.theme.AppColors
@@ -54,13 +63,11 @@ private val searchTimeFmt = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId
 @Composable
 fun SearchOverlay(
     query: String,
-    kbRow: Int,
-    kbCol: Int,
-    inResults: Boolean,
     resultIndex: Int,
     results: List<SearchResult>,
     favoriteChannelIds: Set<UUID>,
     visible: Boolean,
+    onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -84,130 +91,96 @@ fun SearchOverlay(
                     .fillMaxSize()
                     .padding(horizontal = 48.dp, vertical = 28.dp)
             ) {
-                // Header
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 16.dp)
                 ) {
                     Text(
-                        "Suchen",
+                        stringResource(R.string.search),
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "← Ergebnisse  → Tastatur  Back schließen",
+                        stringResource(R.string.search_back_hint),
                         fontSize = 10.sp,
                         color = Color.White.copy(alpha = 0.28f)
                     )
                 }
 
-                // Query display bar
-                QueryBar(query = query, modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp))
+                SearchTextField(
+                    query = query,
+                    visible = visible,
+                    onQueryChange = onQueryChange,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-                // Two-panel layout: results left, keyboard right
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(32.dp)
-                ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        SearchResultsPanel(
-                            query = query,
-                            results = results,
-                            resultIndex = resultIndex,
-                            inResults = inResults,
-                            favoriteChannelIds = favoriteChannelIds
-                        )
-                    }
-                    Column(modifier = Modifier.width(520.dp)) {
-                        SearchKeyboard(kbRow = kbRow, kbCol = kbCol, isFocused = !inResults)
-                        Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(20.dp))
+
+                SearchResultsPanel(
+                    query = query,
+                    results = results,
+                    resultIndex = resultIndex,
+                    favoriteChannelIds = favoriteChannelIds,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchTextField(
+    query: String,
+    visible: Boolean,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(visible) {
+        if (visible) {
+            runCatching { focusRequester.requestFocus() }
+        }
+    }
+
+    BasicTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier.focusRequester(focusRequester),
+        singleLine = true,
+        textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
+        cursorBrush = SolidColor(AppColors.Purple),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Text,
+            capitalization = KeyboardCapitalization.None,
+            imeAction = ImeAction.Search
+        ),
+        keyboardActions = KeyboardActions(onSearch = {}),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
+                    .border(1.dp, AppColors.Purple.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("🔍", fontSize = 16.sp)
+                Spacer(Modifier.width(10.dp))
+                Box(modifier = Modifier.weight(1f)) {
+                    if (query.isEmpty()) {
                         Text(
-                            "↑↓←→ navigieren  OK tippen  ← zu Ergebnissen wechseln",
-                            fontSize = 10.sp,
-                            color = Color.White.copy(alpha = 0.22f)
+                            stringResource(R.string.search_placeholder),
+                            fontSize = 15.sp,
+                            color = Color.White.copy(alpha = 0.28f)
                         )
                     }
+                    innerTextField()
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun QueryBar(query: String, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
-            .border(1.dp, AppColors.Purple.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("🔍", fontSize = 16.sp)
-        Spacer(Modifier.width(10.dp))
-        if (query.isBlank()) {
-            Text(
-                "Kanäle und Sendungen suchen…",
-                fontSize = 15.sp,
-                color = Color.White.copy(alpha = 0.28f)
-            )
-        } else {
-            Text(query, fontSize = 15.sp, color = Color.White)
-            Text("│", fontSize = 15.sp, color = AppColors.Purple)
-        }
-    }
-}
-
-@Composable
-private fun SearchKeyboard(kbRow: Int, kbCol: Int, isFocused: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        SEARCH_KB.forEachIndexed { row, keys ->
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                keys.forEachIndexed { col, key ->
-                    SearchKey(
-                        label = key,
-                        isFocused = isFocused && row == kbRow && col == kbCol
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchKey(label: String, isFocused: Boolean) {
-    val isSpecial = label in listOf("⌫", "_", "✓")
-    val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.08f else 1f,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
-        label = "keyScale"
     )
-    Box(
-        modifier = Modifier
-            .size(width = 46.dp, height = 42.dp)
-            .scale(scale)
-            .background(
-                when {
-                    isFocused -> AppColors.Purple
-                    isSpecial -> AppColors.Surface.copy(alpha = 0.65f)
-                    else -> AppColors.Surface.copy(alpha = 0.4f)
-                },
-                RoundedCornerShape(6.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = when (label) {
-                "_" -> "SPC"
-                "✓" -> "OK"
-                else -> label
-            },
-            color = if (isFocused) Color.White else Color.White.copy(alpha = if (isSpecial) 0.85f else 0.65f),
-            fontSize = if (isSpecial) 11.sp else 14.sp,
-            fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal
-        )
-    }
 }
 
 @Composable
@@ -215,22 +188,22 @@ private fun SearchResultsPanel(
     query: String,
     results: List<SearchResult>,
     resultIndex: Int,
-    inResults: Boolean,
-    favoriteChannelIds: Set<UUID>
+    favoriteChannelIds: Set<UUID>,
+    modifier: Modifier = Modifier
 ) {
     if (query.isBlank()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("🔍", fontSize = 36.sp)
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Kanäle und Sendungen suchen",
+                    stringResource(R.string.search_empty_title),
                     color = Color.White.copy(alpha = 0.3f),
                     fontSize = 14.sp
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Buchstaben rechts tippen · Ergebnisse erscheinen hier",
+                    stringResource(R.string.search_empty_hint),
                     color = Color.White.copy(alpha = 0.18f),
                     fontSize = 11.sp
                 )
@@ -240,9 +213,9 @@ private fun SearchResultsPanel(
     }
 
     if (results.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(
-                "Keine Ergebnisse fur \"$query\"",
+                stringResource(R.string.search_no_results, query),
                 color = Color.White.copy(alpha = 0.35f),
                 fontSize = 14.sp
             )
@@ -251,36 +224,22 @@ private fun SearchResultsPanel(
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(resultIndex, inResults) {
-        if (inResults && results.isNotEmpty()) {
+    LaunchedEffect(resultIndex) {
+        if (results.isNotEmpty()) {
             listState.animateScrollToItem((resultIndex - 2).coerceAtLeast(0))
         }
     }
 
-    Column {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+    Column(modifier = modifier) {
+        Text(
+            pluralStringResource(R.plurals.search_results_count, results.size, results.size),
+            fontSize = 12.sp,
+            color = Color.White.copy(alpha = 0.35f),
             modifier = Modifier.padding(bottom = 8.dp)
-        ) {
-            Text(
-                "${results.size} Ergebnis${if (results.size == 1) "" else "se"}",
-                fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.35f)
-            )
-            if (inResults) {
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .background(AppColors.Purple.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 1.dp)
-                ) {
-                    Text("aktiv", fontSize = 9.sp, color = AppColors.Purple)
-                }
-            }
-        }
+        )
         LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             itemsIndexed(results) { idx, result ->
-                val isHighlighted = inResults && idx == resultIndex
+                val isHighlighted = idx == resultIndex
                 when (result) {
                     is SearchResult.ChannelMatch -> ChannelSearchRow(
                         channel = result.channel,
@@ -401,7 +360,7 @@ private fun ProgramSearchRow(
                 .padding(horizontal = 5.dp, vertical = 2.dp)
         ) {
             Text(
-                if (isLive) "LIVE" else "EPG",
+                if (isLive) stringResource(R.string.live_badge) else "EPG",
                 fontSize = 9.sp,
                 color = if (isLive) Color(0xFFEF5350) else Color.White.copy(alpha = 0.45f),
                 fontWeight = FontWeight.Bold

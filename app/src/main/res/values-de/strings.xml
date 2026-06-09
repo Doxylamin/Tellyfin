@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tellyfin</string>
+
+    <!-- Home screen -->
+    <string name="now_playing">Läuft jetzt</string>
+    <string name="no_favorites_hint_cards">Noch keine Lieblingskanäle · Menu-Taste auf einem Kanal drücken</string>
+    <string name="no_favorites_title">Keine Lieblingskanäle</string>
+    <string name="no_favorites_hint">Menu-Taste auf einem Kanal drücken</string>
+    <string name="filter_all">Alle Kanäle</string>
+    <string name="filter_favorites">Lieblingskanäle (%1$d)</string>
+    <string name="filter_search">🔍  Suchen</string>
+    <string name="home_hint">↑↓ Navigation    OK Ansehen    ← → Karten    Menu ★ Favorit    🔍 Suche</string>
+
+    <!-- Channel list overlay -->
+    <string name="channels">Kanäle</string>
+    <string name="channel_list_hint">%1$d Kanäle  ·  ← schließen  Menu ★</string>
+    <string name="now_badge">JETZT</string>
+
+    <!-- Search overlay -->
+    <string name="search">Suchen</string>
+    <string name="search_back_hint">Zurück zum Schließen</string>
+    <string name="search_placeholder">Kanäle und Sendungen suchen…</string>
+    <string name="search_empty_title">Kanäle und Sendungen suchen</string>
+    <string name="search_empty_hint">Auf der Tastatur tippen · Ergebnisse erscheinen hier</string>
+    <string name="search_no_results">Keine Ergebnisse für \"%1$s\"</string>
+    <plurals name="search_results_count">
+        <item quantity="one">%1$d Ergebnis</item>
+        <item quantity="other">%1$d Ergebnisse</item>
+    </plurals>
+
+    <!-- Now playing overlay -->
+    <string name="live_badge">LIVE</string>
+    <string name="now_playing_dismiss_hint">OK oder ← zum Schließen drücken</string>
+    <string name="no_program_info">Keine Programminformationen verfügbar</string>
+    <string name="up_next">Danach</string>
+    <string name="minutes_remaining">%1$d Min. verbleibend</string>
+    <string name="minutes_left">%1$d Min. verbleibend</string>
+    <string name="duration_minutes">%1$d Min.</string>
+
+    <!-- Quick menu overlay -->
+    <string name="menu_add_favorite">☆  Zu Favoriten hinzufügen</string>
+    <string name="menu_remove_favorite">★  Aus Favoriten entfernen</string>
+    <string name="menu_refresh">↺  Aktualisieren</string>
+    <string name="menu_settings">⚙  Einstellungen</string>
+    <string name="channel_number">Kanal %1$d</string>
+    <string name="quick_menu_hint">↑↓ Navigation  ·  OK Auswählen  ·  ← Schließen</string>
+
+    <!-- EPG overlay -->
+    <string name="guide">TV-Guide</string>
+    <string name="epg_hint">↑↓ Navigation  ·  OK Ansehen</string>
+    <string name="no_data">Keine Daten</string>
+
+    <!-- Settings screen -->
+    <string name="settings">Einstellungen</string>
+    <string name="settings_bandwidth">Maximale Streaming-Bandbreite</string>
+    <string name="settings_server">Server</string>
+    <string name="settings_hint">ZURÜCK zum Schließen · OK zum Anwenden der Bandbreite</string>
+
+    <!-- Channel banner -->
+    <string name="banner_preview_hint">OK zum Ansehen  ·  Zurück zum Abbrechen</string>
+</resources>
