@@ -1,0 +1,94 @@
+name: Release
+
+# Triggered by version tags: v1.0.0, v1.2.3-beta, etc.
+on:
+  push:
+    tags:
+      - "v*"
+
+# Required secrets (set in Settings → Secrets → Actions):
+#   KEYSTORE_BASE64   base64-encoded release keystore  (openssl base64 -in release.jks)
+#   KEYSTORE_PASSWORD keystore password
+#   KEY_ALIAS         signing key alias
+#   KEY_PASSWORD      signing key password
+
+jobs:
+  release:
+    name: Build & publish release APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create GitHub Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed for git rev-list commit count
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Derive version info from tag
+        run: |
+          # Strip the leading 'v' from the tag name (v1.2.3 → 1.2.3)
+          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          # Total commit count gives a monotonically increasing versionCode
+          VERSION_CODE="$(git rev-list --count HEAD)"
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "APK_NAME=tellyfin-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "${{ github.workspace }}/release.jks"
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            -PversionCode="${{ env.VERSION_CODE }}" \
+            -PversionName="${{ env.VERSION_NAME }}"
+
+      - name: Rename APK
+        run: |
+          mv app/build/outputs/apk/release/app-release.apk \
+             "app/build/outputs/apk/release/${{ env.APK_NAME }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Tellyfin ${{ env.VERSION_NAME }}"
+          prerelease: ${{ contains(env.VERSION_NAME, '-') }}
+          files: app/build/outputs/apk/release/${{ env.APK_NAME }}
+          body: |
+            ## Install on Fire TV / Android TV
+
+            1. Download **`${{ env.APK_NAME }}`** below
+            2. Enable *Unknown sources* in your device settings
+               *(Settings → My Fire TV → Developer options → Install unknown apps)*
+            3. Sideload with adb:
+               ```
+               adb install ${{ env.APK_NAME }}
+               ```
+               Or use [adbLink](https://www.jocala.com/) / [Downloader app](https://troypoint.com/downloader/) for wireless install.
+
+            **versionCode:** ${{ env.VERSION_CODE }}
