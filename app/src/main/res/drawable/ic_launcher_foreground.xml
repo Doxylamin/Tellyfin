@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive icon foreground — 108×108dp canvas, 72×72dp safe zone centred.
+  Design: rounded TV bezel with a fin-shaped play arrow inside.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- TV body (rounded rectangle, centred in safe zone) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.10"
+        android:pathData="
+          M28,32 Q24,32 24,36
+          L24,72 Q24,76 28,76
+          L80,76 Q84,76 84,72
+          L84,36 Q84,32 80,32 Z" />
+
+    <!-- TV screen (slightly inset, filled with purple) -->
+    <path
+        android:fillColor="#7C4DFF"
+        android:fillAlpha="0.90"
+        android:pathData="
+          M31,36 Q29,36 29,38
+          L29,70 Q29,72 31,72
+          L77,72 Q79,72 79,70
+          L79,38 Q79,36 77,36 Z" />
+
+    <!-- Play triangle — fin shape, slightly asymmetric like a fin -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="
+          M46,46 L46,62 L66,54 Z" />
+
+    <!-- TV stand left leg -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.50"
+        android:pathData="M38,76 L35,82 L42,82 L44,76 Z" />
+
+    <!-- TV stand right leg -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.50"
+        android:pathData="M70,76 L64,76 L66,82 L73,82 Z" />
+
+    <!-- Stand base bar -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.30"
+        android:pathData="M33,82 L75,82 L75,84 L33,84 Z" />
+
+</vector>
