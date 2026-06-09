@@ -28,13 +28,31 @@ sealed class Overlay {
     object ChannelList : Overlay()
     object Epg : Overlay()
     object Settings : Overlay()
+    object Search : Overlay()
     data class ZapInput(val digits: String) : Overlay()
 }
 
-// 0 = Now Playing cards row, 1 = filter tabs, 2 = channel list
+sealed class SearchResult {
+    data class ChannelMatch(val channel: Channel) : SearchResult()
+    data class ProgramMatch(val program: Program, val channel: Channel) : SearchResult()
+}
+
+val SEARCH_KB = listOf(
+    listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"),
+    listOf("A", "S", "D", "F", "G", "H", "J", "K", "L", "⌫"),
+    listOf("Z", "X", "C", "V", "B", "N", "M", ".", "_", "✓"),
+    listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
+)
+
+// homeFocusSection values
 const val HOME_SECTION_CARDS = 0
 const val HOME_SECTION_FILTER = 1
 const val HOME_SECTION_CHANNELS = 2
+
+// filterTab values
+const val FILTER_ALL = 0
+const val FILTER_FAVORITES = 1
+const val FILTER_SEARCH = 2
 
 data class PlayerUiState(
     val channels: List<Channel> = emptyList(),
@@ -49,11 +67,18 @@ data class PlayerUiState(
     val highlightedMenuIndex: Int = 0,
     val maxBitrate: Int? = null,
     val homeFocusSection: Int = HOME_SECTION_CARDS,
-    val showFavoritesOnly: Boolean = false,
-    val nowPlayingCardIndex: Int = 0
+    val filterTab: Int = FILTER_ALL,
+    val nowPlayingCardIndex: Int = 0,
+    val searchQuery: String = "",
+    val searchKbRow: Int = 0,
+    val searchKbCol: Int = 0,
+    val searchInResults: Boolean = false,
+    val searchResultIndex: Int = 0,
+    val searchResults: List<SearchResult> = emptyList()
 ) {
     val currentChannel: Channel? get() = channels.getOrNull(currentIndex)
     val highlightedChannel: Channel? get() = channels.getOrNull(highlightedIndex)
+    val showFavoritesOnly: Boolean get() = filterTab == FILTER_FAVORITES
 
     fun displayedChannels(): List<Channel> =
         if (showFavoritesOnly) channels.filter { it.id in favoriteChannelIds }
@@ -110,10 +135,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 .toSet()
 
             jellyfinRepo.configure(url, token, userId)
-            _uiState.value = _uiState.value.copy(
-                maxBitrate = maxBitrate,
-                favoriteChannelIds = favIds
-            )
+            _uiState.value = _uiState.value.copy(maxBitrate = maxBitrate, favoriteChannelIds = favIds)
             loadChannels(startIndex = lastIndex)
         }
     }
@@ -165,9 +187,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
         if (keyCode == KeyEvent.KEYCODE_BACK) return handleBack(state)
 
+        if (keyCode == KeyEvent.KEYCODE_SEARCH && state.overlay !is Overlay.Search) {
+            openSearch(); return true
+        }
+
         if (state.channels.isEmpty()) return false
 
         return when {
+            state.overlay is Overlay.Search -> handleSearchKeys(keyCode, state)
             state.overlay is Overlay.ZapInput -> handleZapKeys(keyCode, state)
             state.overlay is Overlay.ChannelList -> handleChannelListKeys(keyCode, state)
             state.overlay is Overlay.Epg -> handleEpgKeys(keyCode, state)
@@ -181,6 +208,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun handleBack(state: PlayerUiState): Boolean {
         return when {
+            state.overlay is Overlay.Search -> { clearSearch(); true }
             state.overlay is Overlay.ChannelBanner -> {
                 bannerDismissJob?.cancel()
                 _uiState.value = state.copy(overlay = Overlay.None, highlightedIndex = state.currentIndex)
@@ -236,9 +264,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     val displayed = state.displayedChannels()
                     val ch = displayed.getOrNull(state.nowPlayingCardIndex) ?: return false
                     val idx = state.channels.indexOf(ch)
-                    if (idx >= 0) startPlaying(idx) else false
+                    if (idx >= 0) startPlaying(idx)
                     true
                 }
+                KeyEvent.KEYCODE_SEARCH -> { openSearch(); true }
                 else -> false
             }
             HOME_SECTION_FILTER -> when (keyCode) {
@@ -247,14 +276,26 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    _uiState.value = state.copy(homeFocusSection = HOME_SECTION_CHANNELS)
+                    if (state.filterTab == FILTER_SEARCH) openSearch()
+                    else _uiState.value = state.copy(homeFocusSection = HOME_SECTION_CHANNELS)
                     true
                 }
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    val n = (state.filterTab - 1).coerceAtLeast(0)
+                    _uiState.value = state.copy(filterTab = n, nowPlayingCardIndex = 0)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    val n = (state.filterTab + 1).coerceAtMost(FILTER_SEARCH)
+                    _uiState.value = state.copy(filterTab = n, nowPlayingCardIndex = 0)
+                    true
+                }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    _uiState.value = state.copy(showFavoritesOnly = !state.showFavoritesOnly, nowPlayingCardIndex = 0)
+                    if (state.filterTab == FILTER_SEARCH) openSearch()
+                    else _uiState.value = state.copy(homeFocusSection = HOME_SECTION_CHANNELS)
                     true
                 }
+                KeyEvent.KEYCODE_SEARCH -> { openSearch(); true }
                 else -> false
             }
             HOME_SECTION_CHANNELS -> when (keyCode) {
@@ -281,6 +322,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                     startPlaying(state.highlightedIndex); true
                 }
+                KeyEvent.KEYCODE_MENU -> {
+                    val ch = state.channels.getOrNull(state.highlightedIndex)
+                    if (ch != null) toggleFavoriteNoClose(ch.id)
+                    true
+                }
+                KeyEvent.KEYCODE_SEARCH -> { openSearch(); true }
                 else -> false
             }
             else -> false
@@ -331,6 +378,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.value = state.copy(overlay = Overlay.None, highlightedIndex = state.currentIndex)
                 true
             }
+            KeyEvent.KEYCODE_MENU -> {
+                val ch = state.channels.getOrNull(state.highlightedIndex)
+                if (ch != null) toggleFavoriteNoClose(ch.id)
+                true
+            }
             else -> false
         }
     }
@@ -357,11 +409,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun handleQuickMenuKeys(keyCode: Int, state: PlayerUiState): Boolean {
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
-                _uiState.value = state.copy(highlightedMenuIndex = (state.highlightedMenuIndex - 1 + QUICK_MENU_SIZE) % QUICK_MENU_SIZE)
+                _uiState.value = state.copy(
+                    highlightedMenuIndex = (state.highlightedMenuIndex - 1 + QUICK_MENU_SIZE) % QUICK_MENU_SIZE
+                )
                 true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                _uiState.value = state.copy(highlightedMenuIndex = (state.highlightedMenuIndex + 1) % QUICK_MENU_SIZE)
+                _uiState.value = state.copy(
+                    highlightedMenuIndex = (state.highlightedMenuIndex + 1) % QUICK_MENU_SIZE
+                )
                 true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
@@ -382,7 +438,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleSettingsKeys(keyCode: Int, state: PlayerUiState): Boolean {
-        // Settings screen handles its own navigation via the highlightedMenuIndex
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 val size = BITRATE_OPTIONS.size
@@ -416,6 +471,149 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun handleSearchKeys(keyCode: Int, state: PlayerUiState): Boolean {
+        val kbRows = SEARCH_KB.size
+        return when {
+            !state.searchInResults -> when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (state.searchKbRow > 0) {
+                        val newRow = state.searchKbRow - 1
+                        val newCol = state.searchKbCol.coerceAtMost(SEARCH_KB[newRow].size - 1)
+                        _uiState.value = state.copy(searchKbRow = newRow, searchKbCol = newCol)
+                    } else if (state.searchResults.isNotEmpty()) {
+                        _uiState.value = state.copy(searchInResults = true, searchResultIndex = 0)
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (state.searchKbRow < kbRows - 1) {
+                        val newRow = state.searchKbRow + 1
+                        val newCol = state.searchKbCol.coerceAtMost(SEARCH_KB[newRow].size - 1)
+                        _uiState.value = state.copy(searchKbRow = newRow, searchKbCol = newCol)
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    if (state.searchKbCol > 0) {
+                        _uiState.value = state.copy(searchKbCol = state.searchKbCol - 1)
+                    } else if (state.searchResults.isNotEmpty()) {
+                        _uiState.value = state.copy(searchInResults = true, searchResultIndex = 0)
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    val maxCol = SEARCH_KB[state.searchKbRow].size - 1
+                    if (state.searchKbCol < maxCol) {
+                        _uiState.value = state.copy(searchKbCol = state.searchKbCol + 1)
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    typeSearchKey(state.searchKbRow, state.searchKbCol, state); true
+                }
+                else -> false
+            }
+            else -> when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (state.searchResultIndex > 0) {
+                        _uiState.value = state.copy(searchResultIndex = state.searchResultIndex - 1)
+                    } else {
+                        _uiState.value = state.copy(searchInResults = false)
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    val maxIdx = state.searchResults.size - 1
+                    if (state.searchResultIndex < maxIdx) {
+                        _uiState.value = state.copy(searchResultIndex = state.searchResultIndex + 1)
+                    } else {
+                        _uiState.value = state.copy(searchInResults = false, searchKbRow = 0, searchKbCol = 0)
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    _uiState.value = state.copy(searchInResults = false)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    val result = state.searchResults.getOrNull(state.searchResultIndex) ?: return false
+                    val channelId = when (result) {
+                        is SearchResult.ChannelMatch -> result.channel.id
+                        is SearchResult.ProgramMatch -> result.channel.id
+                    }
+                    val idx = state.channels.indexOfFirst { it.id == channelId }
+                    if (idx >= 0) { clearSearch(); startPlaying(idx) }
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun typeSearchKey(row: Int, col: Int, state: PlayerUiState) {
+        val key = SEARCH_KB[row][col]
+        if (key == "✓") {
+            if (state.searchResults.isNotEmpty()) {
+                _uiState.value = state.copy(searchInResults = true, searchResultIndex = 0)
+            }
+            return
+        }
+        val char = when (key) {
+            "⌫" -> null
+            "_" -> " "
+            else -> key
+        }
+        val newQuery = if (char == null) state.searchQuery.dropLast(1) else state.searchQuery + char
+        val results = computeSearchResults(newQuery, state)
+        _uiState.value = state.copy(
+            searchQuery = newQuery,
+            searchResults = results,
+            searchInResults = false,
+            searchResultIndex = 0
+        )
+    }
+
+    private fun computeSearchResults(query: String, state: PlayerUiState): List<SearchResult> {
+        if (query.isBlank()) return emptyList()
+        val q = query.lowercase().trim()
+        val channelMatches: List<SearchResult> = state.channels
+            .filter { ch -> ch.name.lowercase().contains(q) || ch.number.toString().contains(q) }
+            .map { SearchResult.ChannelMatch(it) }
+
+        val programMatches: List<SearchResult.ProgramMatch> = state.epgData.entries.flatMap { (chId, progs) ->
+            val ch = state.channels.firstOrNull { it.id.toString() == chId }
+                ?: return@flatMap emptyList<SearchResult.ProgramMatch>()
+            progs.filter { p -> p.title.lowercase().contains(q) }
+                .sortedBy { it.startTime }
+                .take(3)
+                .map { SearchResult.ProgramMatch(it, ch) }
+        }.sortedBy { it.program.startTime }.take(15)
+
+        return (channelMatches + programMatches).take(30)
+    }
+
+    fun openSearch() {
+        _uiState.value = _uiState.value.copy(
+            overlay = Overlay.Search,
+            searchQuery = "",
+            searchKbRow = 0,
+            searchKbCol = 0,
+            searchInResults = false,
+            searchResultIndex = 0,
+            searchResults = emptyList()
+        )
+    }
+
+    private fun clearSearch() {
+        _uiState.value = _uiState.value.copy(
+            overlay = Overlay.None,
+            searchQuery = "",
+            searchResults = emptyList(),
+            searchInResults = false,
+            searchResultIndex = 0
+        )
+    }
+
     // ── Channel operations ──────────────────────────────────────────────────
 
     fun startPlaying(index: Int) {
@@ -430,11 +628,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun switchToChannel(index: Int) {
         bannerDismissJob?.cancel()
-        _uiState.value = _uiState.value.copy(
-            currentIndex = index,
-            highlightedIndex = index,
-            overlay = Overlay.None
-        )
+        _uiState.value = _uiState.value.copy(currentIndex = index, highlightedIndex = index, overlay = Overlay.None)
         playChannel(index)
     }
 
@@ -482,25 +676,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun previewChannel(index: Int) {
         bannerDismissJob?.cancel()
-        _uiState.value = _uiState.value.copy(
-            highlightedIndex = index,
-            overlay = Overlay.ChannelBanner
-        )
+        _uiState.value = _uiState.value.copy(highlightedIndex = index, overlay = Overlay.ChannelBanner)
         bannerDismissJob = viewModelScope.launch {
             delay(3_000)
-            if (_uiState.value.overlay is Overlay.ChannelBanner) {
-                confirmChannelSwitch()
-            }
+            if (_uiState.value.overlay is Overlay.ChannelBanner) confirmChannelSwitch()
         }
     }
 
     private fun confirmChannelSwitch() {
         val state = _uiState.value
-        if (state.highlightedIndex != state.currentIndex) {
-            switchToChannel(state.highlightedIndex)
-        } else {
-            _uiState.value = state.copy(overlay = Overlay.None)
-        }
+        if (state.highlightedIndex != state.currentIndex) switchToChannel(state.highlightedIndex)
+        else _uiState.value = state.copy(overlay = Overlay.None)
     }
 
     private fun openChannelList() {
@@ -533,7 +719,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun showChannelBanner() {
         bannerDismissJob?.cancel()
-        // Reset preview so the banner shows the currently-playing channel, not a pending preview
         _uiState.value = _uiState.value.copy(
             overlay = Overlay.ChannelBanner,
             highlightedIndex = _uiState.value.currentIndex
@@ -556,6 +741,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val current = _uiState.value.favoriteChannelIds
         val updated = if (channelId in current) current - channelId else current + channelId
         _uiState.value = _uiState.value.copy(favoriteChannelIds = updated, overlay = Overlay.None)
+        viewModelScope.launch { prefsRepo.saveFavoriteIds(updated.map { it.toString() }.toSet()) }
+    }
+
+    private fun toggleFavoriteNoClose(channelId: UUID) {
+        val current = _uiState.value.favoriteChannelIds
+        val updated = if (channelId in current) current - channelId else current + channelId
+        _uiState.value = _uiState.value.copy(favoriteChannelIds = updated)
         viewModelScope.launch { prefsRepo.saveFavoriteIds(updated.map { it.toString() }.toSet()) }
     }
 
