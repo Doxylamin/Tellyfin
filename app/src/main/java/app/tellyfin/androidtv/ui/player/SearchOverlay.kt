@@ -37,7 +37,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -138,6 +145,8 @@ private fun SearchTextField(
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(visible) {
         if (visible) {
@@ -148,7 +157,23 @@ private fun SearchTextField(
     BasicTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = modifier.focusRequester(focusRequester),
+        // When the user navigates away (D-pad / OK / Search action), clear focus so the
+        // IME disconnects and won't reopen on the next key event.
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.DirectionUp, Key.DirectionDown,
+                        Key.DirectionCenter, Key.Enter -> {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            false  // let the event reach the Activity key handler
+                        }
+                        else -> false
+                    }
+                } else false
+            },
         singleLine = true,
         textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
         cursorBrush = SolidColor(AppColors.Purple),
@@ -157,7 +182,10 @@ private fun SearchTextField(
             capitalization = KeyboardCapitalization.None,
             imeAction = ImeAction.Search
         ),
-        keyboardActions = KeyboardActions(onSearch = {}),
+        keyboardActions = KeyboardActions(onSearch = {
+            keyboardController?.hide()
+            focusManager.clearFocus()
+        }),
         decorationBox = { innerTextField ->
             Row(
                 modifier = Modifier
