@@ -42,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.ui.theme.AppColors
 import java.time.Instant
@@ -153,7 +155,7 @@ fun ChannelBanner(
                             )
                             val remaining = ((prog.endTime.epochSecond - now.epochSecond) / 60).coerceAtLeast(0)
                             Text(
-                                text = "${remaining}m left",
+                                text = stringResource(R.string.minutes_left, remaining),
                                 fontSize = 11.sp,
                                 color = Color.White.copy(alpha = 0.40f)
                             )
@@ -163,7 +165,7 @@ fun ChannelBanner(
                     if (isPreview) {
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = "OK to watch  ·  Back to cancel",
+                            text = stringResource(R.string.banner_preview_hint),
                             fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.35f)
                         )

@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
 import app.tellyfin.androidtv.ui.theme.AppColors
@@ -113,7 +115,7 @@ fun EpgOverlay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Guide",
+                        stringResource(R.string.guide),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -133,7 +135,7 @@ fun EpgOverlay(
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "↑↓ Navigate  ·  OK Watch",
+                        stringResource(R.string.epg_hint),
                         fontSize = 11.sp,
                         color = Color.White.copy(alpha = 0.25f)
                     )
@@ -290,7 +292,7 @@ private fun EpgRow(
                 contentAlignment = Alignment.CenterStart
             ) {
                 Text(
-                    "No data",
+                    stringResource(R.string.no_data),
                     fontSize = 11.sp,
                     color = Color.White.copy(alpha = 0.25f),
                     modifier = Modifier.padding(horizontal = 8.dp)
@@ -330,7 +332,7 @@ private fun EpgRow(
                         )
                         if (isLive) {
                             Text(
-                                text = "LIVE",
+                                text = stringResource(R.string.live_badge),
                                 fontSize = 8.sp,
                                 color = Color.White.copy(alpha = 0.60f),
                                 fontWeight = FontWeight.Bold

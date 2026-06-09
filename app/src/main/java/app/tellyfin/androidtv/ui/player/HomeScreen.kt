@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
+import androidx.compose.ui.res.stringResource
+import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.ui.theme.AppColors
 import java.time.Instant
 import java.time.ZoneId
@@ -146,7 +148,7 @@ fun HomeScreen(
 
         // Bottom hint bar
         Text(
-            "↑↓ Navigate    OK Watch    ← → Cards    Menu ★ Favorit    🔍 Suche",
+            stringResource(R.string.home_hint),
             fontSize = 10.sp,
             color = AppColors.OnSurface.copy(alpha = 0.25f),
             modifier = Modifier
@@ -166,7 +168,7 @@ private fun NowPlayingRow(
 ) {
     Column(modifier = Modifier.padding(start = 48.dp)) {
         Text(
-            "Läuft jetzt",
+            stringResource(R.string.now_playing),
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
             color = Color.White,
@@ -182,7 +184,7 @@ private fun NowPlayingRow(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Noch keine Lieblingskanäle · Menu-Taste auf einem Kanal drücken",
+                    stringResource(R.string.no_favorites_hint_cards),
                     color = Color.White.copy(alpha = 0.28f),
                     fontSize = 12.sp
                 )
@@ -344,17 +346,17 @@ private fun FilterTabs(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         FilterTab(
-            label = "Alle Kanäle",
+            label = stringResource(R.string.filter_all),
             isSelected = filterTab == FILTER_ALL,
             isFocused = isSectionFocused && filterTab == FILTER_ALL
         )
         FilterTab(
-            label = "Lieblingskanäle ($favoriteCount)",
+            label = stringResource(R.string.filter_favorites, favoriteCount),
             isSelected = filterTab == FILTER_FAVORITES,
             isFocused = isSectionFocused && filterTab == FILTER_FAVORITES
         )
         FilterTab(
-            label = "🔍  Suchen",
+            label = stringResource(R.string.filter_search),
             isSelected = false,
             isFocused = isSectionFocused && filterTab == FILTER_SEARCH
         )
@@ -412,9 +414,9 @@ private fun ChannelEpgList(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text("☆", fontSize = 28.sp, color = Color.White.copy(alpha = 0.2f))
-                Text("Keine Lieblingskanäle", color = Color.White.copy(alpha = 0.3f), fontSize = 14.sp)
+                Text(stringResource(R.string.no_favorites_title), color = Color.White.copy(alpha = 0.3f), fontSize = 14.sp)
                 Text(
-                    "Menu-Taste auf einem Kanal drücken",
+                    stringResource(R.string.no_favorites_hint),
                     color = Color.White.copy(alpha = 0.18f),
                     fontSize = 11.sp
                 )
