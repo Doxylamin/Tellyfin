@@ -21,12 +21,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -37,15 +44,19 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.ui.theme.AppColors
+import java.time.Instant
+import java.util.UUID
 
 @Composable
 fun ChannelListOverlay(
     channels: List<Channel>,
     currentIndex: Int,
     highlightedIndex: Int,
+    favoriteChannelIds: Set<UUID>,
     visible: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val now = remember { Instant.now() }
     val listState = rememberLazyListState()
     LaunchedEffect(highlightedIndex, visible) {
         if (visible && channels.isNotEmpty()) {
@@ -90,7 +101,7 @@ fun ChannelListOverlay(
                         color = Color.White
                     )
                     Text(
-                        "${channels.size} channels  ·  ← to close",
+                        "${channels.size} channels  ·  ← schließen  Menu ★",
                         fontSize = 11.sp,
                         color = Color.White.copy(alpha = 0.30f)
                     )
@@ -115,7 +126,9 @@ fun ChannelListOverlay(
                             ChannelListRow(
                                 channel = channel,
                                 isHighlighted = index == highlightedIndex,
-                                isCurrent = index == currentIndex
+                                isCurrent = index == currentIndex,
+                                isFavorite = channel.id in favoriteChannelIds,
+                                now = now
                             )
                         }
                     }
@@ -143,11 +156,19 @@ fun ChannelListOverlay(
 private fun ChannelListRow(
     channel: Channel,
     isHighlighted: Boolean,
-    isCurrent: Boolean
+    isCurrent: Boolean,
+    isFavorite: Boolean,
+    now: Instant
 ) {
+    val scale by animateFloatAsState(
+        targetValue = if (isHighlighted) 1.02f else 1f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
+        label = "rowScale"
+    )
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .scale(scale)
             .background(
                 when {
                     isHighlighted -> AppColors.Purple.copy(alpha = 0.18f)
@@ -199,14 +220,21 @@ private fun ChannelListRow(
             Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = channel.name,
-                    fontSize = 14.sp,
-                    color = if (isHighlighted) Color.White else Color.White.copy(alpha = 0.75f),
-                    fontWeight = if (isHighlighted) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = channel.name,
+                        fontSize = 14.sp,
+                        color = if (isHighlighted) Color.White else Color.White.copy(alpha = 0.75f),
+                        fontWeight = if (isHighlighted) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isFavorite) {
+                        Spacer(Modifier.width(4.dp))
+                        Text("★", color = AppColors.Purple, fontSize = 10.sp)
+                    }
+                }
                 channel.currentProgram?.let { prog ->
                     Text(
                         text = prog.title,
@@ -214,6 +242,12 @@ private fun ChannelListRow(
                         color = Color.White.copy(alpha = if (isHighlighted) 0.55f else 0.35f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                    LinearProgressIndicator(
+                        progress = { prog.progressFraction(now) },
+                        modifier = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)),
+                        color = AppColors.Purple.copy(alpha = 0.6f),
+                        trackColor = Color.White.copy(alpha = 0.08f)
                     )
                 }
             }

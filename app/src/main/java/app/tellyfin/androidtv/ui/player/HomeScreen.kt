@@ -1,5 +1,9 @@
 package app.tellyfin.androidtv.ui.player
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -30,6 +34,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import kotlinx.coroutines.delay
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
 
@@ -39,11 +44,12 @@ fun HomeScreen(
     highlightedIndex: Int,
     epgData: Map<String, List<Program>>,
     favoriteChannelIds: Set<UUID>,
-    showFavoritesOnly: Boolean,
+    filterTab: Int,
     homeFocusSection: Int,
     nowPlayingCardIndex: Int,
     modifier: Modifier = Modifier
 ) {
+    val showFavoritesOnly = filterTab == FILTER_FAVORITES
     val now = remember { Instant.now() }
 
     Box(
@@ -60,16 +66,24 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "JellyTV",
+                    "Tellyfin",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppColors.Purple
                 )
                 Spacer(Modifier.weight(1f))
+                var clockTime by remember { mutableStateOf(timeFmt.format(Instant.now())) }
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        delay(30_000L)
+                        clockTime = timeFmt.format(Instant.now())
+                    }
+                }
                 Text(
-                    "Live TV",
-                    fontSize = 13.sp,
-                    color = AppColors.OnSurface.copy(alpha = 0.4f)
+                    clockTime,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.5f)
                 )
             }
 
@@ -103,7 +117,7 @@ fun HomeScreen(
             // ── Section 2: Filter tabs ────────────────────────────────────────
             val filterFocused = homeFocusSection == HOME_SECTION_FILTER
             FilterTabs(
-                showFavoritesOnly = showFavoritesOnly,
+                filterTab = filterTab,
                 isSectionFocused = filterFocused,
                 favoriteCount = channels.count { it.id in favoriteChannelIds }
             )
@@ -132,7 +146,7 @@ fun HomeScreen(
 
         // Bottom hint bar
         Text(
-            "↑↓ Navigate    OK Watch    ← → Cards    Menu Quick Actions",
+            "↑↓ Navigate    OK Watch    ← → Cards    Menu ★ Favorit    🔍 Suche",
             fontSize = 10.sp,
             color = AppColors.OnSurface.copy(alpha = 0.25f),
             modifier = Modifier
@@ -159,28 +173,44 @@ private fun NowPlayingRow(
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        val rowState = rememberLazyListState()
-        LaunchedEffect(focusedCardIndex) {
-            if (channels.isNotEmpty()) {
-                rowState.animateScrollToItem(focusedCardIndex.coerceIn(0, channels.size - 1))
-            }
-        }
-
-        LazyRow(
-            state = rowState,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(end = 48.dp)
-        ) {
-            itemsIndexed(channels) { index, channel ->
-                val programs = epgData[channel.id.toString()].orEmpty()
-                val current = programs.firstOrNull { it.startTime <= now && it.endTime > now }
-                    ?: channel.currentProgram
-                NowPlayingCard(
-                    channel = channel,
-                    program = current,
-                    now = now,
-                    isFocused = isSectionFocused && index == focusedCardIndex
+        if (channels.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(130.dp)
+                    .padding(end = 48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Noch keine Lieblingskanäle · Menu-Taste auf einem Kanal drücken",
+                    color = Color.White.copy(alpha = 0.28f),
+                    fontSize = 12.sp
                 )
+            }
+        } else {
+            val rowState = rememberLazyListState()
+            LaunchedEffect(focusedCardIndex) {
+                if (channels.isNotEmpty()) {
+                    rowState.animateScrollToItem(focusedCardIndex.coerceIn(0, channels.size - 1))
+                }
+            }
+
+            LazyRow(
+                state = rowState,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(end = 48.dp)
+            ) {
+                itemsIndexed(channels) { index, channel ->
+                    val programs = epgData[channel.id.toString()].orEmpty()
+                    val current = programs.firstOrNull { it.startTime <= now && it.endTime > now }
+                        ?: channel.currentProgram
+                    NowPlayingCard(
+                        channel = channel,
+                        program = current,
+                        now = now,
+                        isFocused = isSectionFocused && index == focusedCardIndex
+                    )
+                }
             }
         }
     }
@@ -195,11 +225,17 @@ private fun NowPlayingCard(
 ) {
     val cardWidth = 220.dp
     val cardHeight = 130.dp // ~16:9
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.045f else 1f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
+        label = "cardScale"
+    )
 
     Box(
         modifier = Modifier
             .width(cardWidth)
             .height(cardHeight)
+            .scale(scale)
             .clip(RoundedCornerShape(10.dp))
             .background(AppColors.Surface)
             .then(
@@ -299,7 +335,7 @@ private fun NowPlayingCard(
 
 @Composable
 private fun FilterTabs(
-    showFavoritesOnly: Boolean,
+    filterTab: Int,
     isSectionFocused: Boolean,
     favoriteCount: Int
 ) {
@@ -309,13 +345,18 @@ private fun FilterTabs(
     ) {
         FilterTab(
             label = "Alle Kanäle",
-            isSelected = !showFavoritesOnly,
-            isFocused = isSectionFocused && !showFavoritesOnly
+            isSelected = filterTab == FILTER_ALL,
+            isFocused = isSectionFocused && filterTab == FILTER_ALL
         )
         FilterTab(
             label = "Lieblingskanäle ($favoriteCount)",
-            isSelected = showFavoritesOnly,
-            isFocused = isSectionFocused && showFavoritesOnly
+            isSelected = filterTab == FILTER_FAVORITES,
+            isFocused = isSectionFocused && filterTab == FILTER_FAVORITES
+        )
+        FilterTab(
+            label = "🔍  Suchen",
+            isSelected = false,
+            isFocused = isSectionFocused && filterTab == FILTER_SEARCH
         )
     }
 }
@@ -361,37 +402,57 @@ private fun ChannelEpgList(
     isSectionFocused: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState()
-    val highlightedIdx = channels.indexOfFirst { it.id == highlightedChannelId }
-    LaunchedEffect(highlightedIdx, isSectionFocused) {
-        if (isSectionFocused && highlightedIdx >= 0) {
-            listState.animateScrollToItem((highlightedIdx - 2).coerceAtLeast(0))
+    if (channels.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxWidth().padding(vertical = 40.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("☆", fontSize = 28.sp, color = Color.White.copy(alpha = 0.2f))
+                Text("Keine Lieblingskanäle", color = Color.White.copy(alpha = 0.3f), fontSize = 14.sp)
+                Text(
+                    "Menu-Taste auf einem Kanal drücken",
+                    color = Color.White.copy(alpha = 0.18f),
+                    fontSize = 11.sp
+                )
+            }
         }
-    }
-
-    LazyColumn(
-        state = listState,
-        modifier = modifier.padding(horizontal = 48.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        itemsIndexed(channels) { _, channel ->
-            val isHighlighted = isSectionFocused && channel.id == highlightedChannelId
-            val isFavorite = channel.id in favoriteChannelIds
-            val programs = epgData[channel.id.toString()].orEmpty()
-            val current = programs.firstOrNull { it.startTime <= now && it.endTime > now }
-                ?: channel.currentProgram
-            val upcoming = programs.filter { it.startTime > now }.sortedBy { it.startTime }.take(2)
-
-            ChannelEpgRow(
-                channel = channel,
-                currentProgram = current,
-                upcomingPrograms = upcoming,
-                isFavorite = isFavorite,
-                isHighlighted = isHighlighted,
-                now = now
-            )
+    } else {
+        val listState = rememberLazyListState()
+        val highlightedIdx = channels.indexOfFirst { it.id == highlightedChannelId }
+        LaunchedEffect(highlightedIdx, isSectionFocused) {
+            if (isSectionFocused && highlightedIdx >= 0) {
+                listState.animateScrollToItem((highlightedIdx - 2).coerceAtLeast(0))
+            }
         }
-        item { Spacer(Modifier.height(32.dp)) }
+
+        LazyColumn(
+            state = listState,
+            modifier = modifier.padding(horizontal = 48.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            itemsIndexed(channels) { _, channel ->
+                val isHighlighted = isSectionFocused && channel.id == highlightedChannelId
+                val isFavorite = channel.id in favoriteChannelIds
+                val programs = epgData[channel.id.toString()].orEmpty()
+                val current = programs.firstOrNull { it.startTime <= now && it.endTime > now }
+                    ?: channel.currentProgram
+                val upcoming = programs.filter { it.startTime > now }.sortedBy { it.startTime }.take(2)
+
+                ChannelEpgRow(
+                    channel = channel,
+                    currentProgram = current,
+                    upcomingPrograms = upcoming,
+                    isFavorite = isFavorite,
+                    isHighlighted = isHighlighted,
+                    now = now
+                )
+            }
+            item { Spacer(Modifier.height(32.dp)) }
+        }
     }
 }
 
@@ -404,9 +465,15 @@ private fun ChannelEpgRow(
     isHighlighted: Boolean,
     now: Instant
 ) {
+    val scale by animateFloatAsState(
+        targetValue = if (isHighlighted) 1.02f else 1f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
+        label = "rowScale"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .scale(scale)
             .background(
                 if (isHighlighted) AppColors.Purple.copy(alpha = 0.18f)
                 else Color.Transparent,

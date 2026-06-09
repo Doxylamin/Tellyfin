@@ -51,7 +51,7 @@ fun PlayerScreen(
                     highlightedIndex = state.highlightedIndex,
                     epgData = state.epgData,
                     favoriteChannelIds = state.favoriteChannelIds,
-                    showFavoritesOnly = state.showFavoritesOnly,
+                    filterTab = state.filterTab,
                     homeFocusSection = state.homeFocusSection,
                     nowPlayingCardIndex = state.nowPlayingCardIndex
                 )
@@ -107,6 +107,7 @@ fun PlayerScreen(
                     channels = state.channels,
                     currentIndex = state.currentIndex,
                     highlightedIndex = state.highlightedIndex,
+                    favoriteChannelIds = state.favoriteChannelIds,
                     visible = state.overlay is Overlay.ChannelList
                 )
 
@@ -149,6 +150,18 @@ fun PlayerScreen(
             currentChannelIndex = state.currentIndex,
             highlightedRow = state.highlightedIndex,
             visible = state.overlay is Overlay.Epg
+        )
+
+        // Search overlay is accessible from any state
+        SearchOverlay(
+            query = state.searchQuery,
+            kbRow = state.searchKbRow,
+            kbCol = state.searchKbCol,
+            inResults = state.searchInResults,
+            resultIndex = state.searchResultIndex,
+            results = state.searchResults,
+            favoriteChannelIds = state.favoriteChannelIds,
+            visible = state.overlay is Overlay.Search
         )
     }
 }
