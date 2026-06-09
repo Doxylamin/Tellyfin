@@ -4,6 +4,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// CI passes -PversionCode and -PversionName via the command line.
+// Local builds fall back to defaults.
+val ciVersionCode = (project.findProperty("versionCode") as? String)?.toInt() ?: 1
+val ciVersionName = (project.findProperty("versionName") as? String) ?: "1.0"
+
+// Release signing is driven entirely by environment variables so no
+// keystore file ever lives in the repository.
+val keystorePath: String? = System.getenv("KEYSTORE_PATH")
+
 android {
     namespace = "app.tellyfin.androidtv"
     compileSdk = 34
@@ -12,18 +21,42 @@ android {
         applicationId = "app.tellyfin.androidtv"
         minSdk = 21
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = ciVersionCode
+        versionName = ciVersionName
+    }
+
+    if (keystorePath != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (keystorePath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
+    }
+
+    lint {
+        // Produce the HTML report; don't abort so lint issues show up as
+        // annotations in PRs rather than hard build failures.
+        abortOnError = false
+        htmlReport = true
+        htmlOutput = file("build/reports/lint/lint-results.html")
+        sarifReport = true
+        sarifOutput = file("build/reports/lint/lint-results.sarif")
     }
 
     compileOptions {
