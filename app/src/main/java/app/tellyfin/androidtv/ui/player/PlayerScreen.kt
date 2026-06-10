@@ -20,17 +20,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
+import app.tellyfin.androidtv.BuildConfig
 import app.tellyfin.androidtv.ui.theme.AppColors
 
 @Composable
 fun PlayerScreen(
     viewModel: PlayerViewModel,
-    onLogOut: () -> Unit = {}
+    onLogOut: () -> Unit = {},
+    onInstallApk: (java.io.File) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
 
     LaunchedEffect(state.logoutRequested) {
         if (state.logoutRequested) onLogOut()
+    }
+
+    LaunchedEffect(state.pendingInstallFile) {
+        state.pendingInstallFile?.let {
+            onInstallApk(it)
+            viewModel.clearPendingInstall()
+        }
     }
 
     if (state.isLoadingChannels) {
@@ -51,6 +60,8 @@ fun PlayerScreen(
                     username = state.username,
                     currentBitrate = state.maxBitrate,
                     highlightedIndex = state.highlightedMenuIndex,
+                    updateStatus = state.updateStatus,
+                    appVersion = BuildConfig.VERSION_NAME,
                     modifier = Modifier.fillMaxSize()
                 )
             }

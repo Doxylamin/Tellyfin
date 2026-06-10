@@ -79,6 +79,14 @@
     <string name="settings_server">Server</string>
     <string name="settings_username_label">Angemeldet als</string>
     <string name="settings_logout">Abmelden</string>
+    <string name="settings_section_app">App</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_update_checking">Suche nach Updates…</string>
+    <string name="settings_update_up_to_date">Aktuell</string>
+    <string name="settings_update_available">Update verfügbar: %s</string>
+    <string name="settings_update_downloading">Wird heruntergeladen… %d%%</string>
+    <string name="settings_update_ready">OK zum Installieren</string>
+    <string name="settings_update_error">Update-Prüfung fehlgeschlagen</string>
     <string name="settings_hint">↑↓ Navigation  ·  ◀▶ Bandbreite ändern  ·  ZURÜCK zum Schließen</string>
 
     <!-- Channel banner -->

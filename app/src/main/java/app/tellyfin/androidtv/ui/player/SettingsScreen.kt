@@ -4,10 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -16,7 +19,7 @@ import androidx.compose.ui.unit.sp
 import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.ui.theme.AppColors
 
-// highlightedIndex: 0 = bandwidth selector, 1 = logout
+// highlightedIndex: 0 = bandwidth, 1 = update, 2 = logout
 
 @Composable
 fun SettingsScreen(
@@ -24,6 +27,8 @@ fun SettingsScreen(
     username: String,
     currentBitrate: Int?,
     highlightedIndex: Int,
+    updateStatus: UpdateStatus = UpdateStatus.Idle,
+    appVersion: String = "",
     modifier: Modifier = Modifier
 ) {
     val currentLabel = BITRATE_OPTIONS.firstOrNull { it.first == currentBitrate }?.second
@@ -115,10 +120,122 @@ fun SettingsScreen(
                 }
             }
 
+            Spacer(Modifier.height(32.dp))
+
+            // ── App section ──────────────────────────────────────────────────
+            SectionHeader(stringResource(R.string.settings_section_app))
+
+            InfoRow(
+                label = stringResource(R.string.settings_version),
+                value = if (appVersion.isNotBlank()) "v$appVersion" else "—"
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            // Update row
+            val updateFocused = highlightedIndex == 1
+            val isUpdateActionable = updateStatus is UpdateStatus.Available ||
+                                     updateStatus == UpdateStatus.ReadyToInstall
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        when {
+                            updateFocused && isUpdateActionable -> Modifier
+                                .background(AppColors.Purple.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
+                                .border(1.dp, AppColors.Purple, RoundedCornerShape(8.dp))
+                            updateFocused -> Modifier
+                                .background(AppColors.Surface, RoundedCornerShape(8.dp))
+                                .border(1.dp, AppColors.Purple.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                            else -> Modifier
+                                .background(AppColors.Surface, RoundedCornerShape(8.dp))
+                                .border(1.dp, AppColors.OnSurface.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                        }
+                    )
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val labelColor = when {
+                    updateFocused && isUpdateActionable -> Color.White
+                    updateFocused -> Color.White.copy(alpha = 0.80f)
+                    else -> AppColors.OnSurface.copy(alpha = 0.55f)
+                }
+                val valueColor = when {
+                    updateStatus is UpdateStatus.Available -> AppColors.Purple
+                    updateStatus == UpdateStatus.ReadyToInstall -> AppColors.Purple
+                    updateStatus is UpdateStatus.Error -> AppColors.Red.copy(alpha = 0.80f)
+                    else -> AppColors.OnSurface.copy(alpha = 0.55f)
+                }
+
+                Text(
+                    "Update",
+                    color = labelColor,
+                    fontSize = 14.sp,
+                    fontWeight = if (updateFocused) FontWeight.SemiBold else FontWeight.Normal
+                )
+
+                when (updateStatus) {
+                    UpdateStatus.Idle, UpdateStatus.UpToDate ->
+                        Text(
+                            if (updateStatus == UpdateStatus.UpToDate)
+                                stringResource(R.string.settings_update_up_to_date)
+                            else "—",
+                            color = valueColor, fontSize = 13.sp
+                        )
+                    UpdateStatus.Checking ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = AppColors.Purple.copy(alpha = 0.60f),
+                                trackColor = Color.Transparent,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                stringResource(R.string.settings_update_checking),
+                                color = AppColors.OnSurface.copy(alpha = 0.45f), fontSize = 12.sp
+                            )
+                        }
+                    is UpdateStatus.Available ->
+                        Text(
+                            stringResource(R.string.settings_update_available, updateStatus.version),
+                            color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold
+                        )
+                    is UpdateStatus.Downloading ->
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                stringResource(R.string.settings_update_downloading, updateStatus.progress),
+                                color = AppColors.Purple.copy(alpha = 0.80f), fontSize = 12.sp
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            LinearProgressIndicator(
+                                progress = { updateStatus.progress / 100f },
+                                modifier = Modifier.width(120.dp).height(3.dp)
+                                    .clip(RoundedCornerShape(2.dp)),
+                                color = AppColors.Purple,
+                                trackColor = Color.White.copy(alpha = 0.12f)
+                            )
+                        }
+                    UpdateStatus.ReadyToInstall ->
+                        Text(
+                            stringResource(R.string.settings_update_ready),
+                            color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold
+                        )
+                    is UpdateStatus.Error ->
+                        Text(
+                            stringResource(R.string.settings_update_error),
+                            color = valueColor, fontSize = 12.sp
+                        )
+                }
+            }
+
             Spacer(Modifier.weight(1f))
 
             // ── Logout ───────────────────────────────────────────────────────
-            val logoutFocused = highlightedIndex == 1
+            val logoutFocused = highlightedIndex == 2
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

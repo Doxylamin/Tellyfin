@@ -79,6 +79,14 @@
     <string name="settings_server">Server</string>
     <string name="settings_username_label">Signed in as</string>
     <string name="settings_logout">Sign out</string>
+    <string name="settings_section_app">App</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_update_checking">Checking for updates…</string>
+    <string name="settings_update_up_to_date">Up to date</string>
+    <string name="settings_update_available">Update available: %s</string>
+    <string name="settings_update_downloading">Downloading… %d%%</string>
+    <string name="settings_update_ready">OK to install</string>
+    <string name="settings_update_error">Update check failed</string>
     <string name="settings_hint">↑↓ Navigate  ·  ◀▶ Change bandwidth  ·  BACK to close</string>
 
     <!-- Channel banner -->

@@ -23,6 +23,11 @@ android {
         targetSdk = 34
         versionCode = ciVersionCode
         versionName = ciVersionName
+        buildConfigField("String", "VERSION_NAME", "\"$ciVersionName\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     if (keystorePath != null) {
