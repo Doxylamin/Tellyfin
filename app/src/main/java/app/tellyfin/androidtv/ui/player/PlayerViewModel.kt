@@ -54,6 +54,7 @@ const val NAV_SETTINGS = 3
 
 data class PlayerUiState(
     val isLoadingChannels: Boolean = true,
+    val loadingStatus: String = "Connecting to server…",
     val channels: List<Channel> = emptyList(),
     val currentIndex: Int = 0,
     val highlightedIndex: Int = 0,
@@ -140,7 +141,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             _uiState.value = _uiState.value.copy(
                 maxBitrate = maxBitrate,
                 favoriteChannelIds = favIds,
-                username = username
+                username = username,
+                loadingStatus = "Loading channels…"
             )
             loadChannels(startIndex = lastIndex)
         }
@@ -150,13 +152,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         try {
             val channels = jellyfinRepo.getChannels()
             val safeIndex = startIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+            // Keep splash visible (isLoadingChannels stays true) until EPG also finishes
             _uiState.value = _uiState.value.copy(
-                isLoadingChannels = false,
                 channels = channels,
                 currentIndex = safeIndex,
                 highlightedIndex = safeIndex,
                 nowPlayingCardIndex = safeIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0)),
-                isPlaying = false
+                isPlaying = false,
+                loadingStatus = "Loading programme guide…"
             )
             loadEpg()
         } catch (e: Exception) {
@@ -172,8 +175,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 val ids = _uiState.value.channels.map { it.id }
                 val programs = jellyfinRepo.getEpgPrograms(ids)
-                _uiState.value = _uiState.value.copy(epgData = programs.mapKeys { it.key.toString() })
-            } catch (_: Exception) {}
+                _uiState.value = _uiState.value.copy(
+                    epgData = programs.mapKeys { it.key.toString() },
+                    isLoadingChannels = false
+                )
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(isLoadingChannels = false)
+            }
         }
     }
 
