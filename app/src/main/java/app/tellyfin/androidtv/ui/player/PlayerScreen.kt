@@ -144,6 +144,32 @@ fun PlayerScreen(
             }
         }
 
+        // Channel context drawer (MENU key on EPG row)
+        val contextChannelIndex = (state.overlay as? Overlay.ChannelContext)?.channelIndex ?: 0
+        val contextChannel = state.channels.getOrNull(contextChannelIndex)
+        ChannelContextDrawer(
+            visible = !state.isPlaying && state.overlay is Overlay.ChannelContext,
+            channel = contextChannel,
+            isFavorite = contextChannel?.id?.let { it in state.favoriteChannelIds } ?: false,
+            currentProgram = contextChannel?.let { ch ->
+                val now = java.time.Instant.now()
+                state.epgData[ch.id.toString()]?.firstOrNull { p -> p.startTime <= now && p.endTime > now }
+            },
+            highlightedIndex = state.channelContextMenuIndex,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Channel details (programme list for a single channel)
+        val detailsChannelIndex = (state.overlay as? Overlay.ChannelDetails)?.channelIndex ?: 0
+        val detailsChannel = state.channels.getOrNull(detailsChannelIndex)
+        ChannelDetailsOverlay(
+            visible = !state.isPlaying && state.overlay is Overlay.ChannelDetails,
+            channel = detailsChannel,
+            programs = detailsChannel?.let { state.epgData[it.id.toString()].orEmpty() } ?: emptyList(),
+            focusedIndex = state.channelDetailsProgramIndex,
+            modifier = Modifier.fillMaxSize()
+        )
+
         // EPG overlay is accessible from any state
         EpgOverlay(
             channels = state.channels,

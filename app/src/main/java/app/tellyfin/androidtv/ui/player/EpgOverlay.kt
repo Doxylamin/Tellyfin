@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -48,10 +47,10 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 private val CHANNEL_LABEL_WIDTH = 148.dp
-private const val MINUTES_PER_PIXEL = 0.5f  // 2px per minute
+private const val PX_PER_MIN = 4.0f  // 4 dp per minute → 1 h = 240 dp
+private const val WINDOW_MINUTES = 300  // 5 hours
 private val ROW_HEIGHT = 52.dp
 private val HEADER_HEIGHT = 28.dp
-private const val VISIBLE_HOURS = 4L
 
 @Composable
 fun EpgOverlay(
@@ -66,12 +65,19 @@ fun EpgOverlay(
     val zoneId = remember { ZoneId.systemDefault() }
     val timeFmt = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(zoneId) }
 
-    val nowOffsetDp = ((now.epochSecond / 60f) * (1f / MINUTES_PER_PIXEL))
-    val gridScrollOffset = (nowOffsetDp - 60f).coerceAtLeast(0f)
+    // Window: previous 30-min mark → +5 h
+    val windowStart = remember(now) {
+        Instant.ofEpochSecond((now.epochSecond / 1800L) * 1800L - 1800L)
+    }
+    val windowEndSec = windowStart.epochSecond + WINDOW_MINUTES * 60L
+    val totalWidthDp = (WINDOW_MINUTES * PX_PER_MIN).dp
 
-    val hScroll = rememberScrollState(initial = gridScrollOffset.roundToInt())
+    val nowOffsetDp = ((now.epochSecond - windowStart.epochSecond) / 60f) * PX_PER_MIN
+    val initialScroll = ((nowOffsetDp - 100f).coerceAtLeast(0f)).roundToInt()
+
+    val hScroll = rememberScrollState(initial = initialScroll)
     LaunchedEffect(visible) {
-        if (visible) hScroll.scrollTo(gridScrollOffset.roundToInt())
+        if (visible) hScroll.scrollTo(initialScroll)
     }
 
     val channelListState = rememberLazyListState()
@@ -81,12 +87,13 @@ fun EpgOverlay(
         }
     }
 
-    val startEpoch = now.epochSecond - (now.epochSecond % 1800)
-    val ticks = (0..VISIBLE_HOURS * 2).map { i ->
-        val tickEpoch = startEpoch + i * 1800
-        val xDp = (tickEpoch / 60f) * (1f / MINUTES_PER_PIXEL)
-        val label = timeFmt.format(Instant.ofEpochSecond(tickEpoch))
-        Pair(xDp, label)
+    val ticks = remember(windowStart) {
+        val count = WINDOW_MINUTES / 30 + 1
+        (0 until count).map { i ->
+            val xDp = i * 30f * PX_PER_MIN
+            val label = timeFmt.format(Instant.ofEpochSecond(windowStart.epochSecond + i * 1800L))
+            Pair(xDp, label)
+        }
     }
 
     AnimatedVisibility(
@@ -206,11 +213,11 @@ fun EpgOverlay(
                                 .fillMaxSize()
                                 .horizontalScroll(hScroll)
                         ) {
-                            // Time ruler
+                            // Time ruler — fixed width matching program rows
                             Box(
                                 modifier = Modifier
                                     .height(HEADER_HEIGHT)
-                                    .width(IntrinsicSize.Max)
+                                    .width(totalWidthDp)
                                     .background(Color.White.copy(alpha = 0.03f))
                             ) {
                                 ticks.forEach { (xDp, label) ->
@@ -223,12 +230,11 @@ fun EpgOverlay(
                                             .padding(top = 6.dp, start = 4.dp)
                                     )
                                 }
-                                // "Now" tick label
                                 Text(
                                     text = "▼",
                                     fontSize = 8.sp,
                                     color = AppColors.Purple,
-                                    modifier = Modifier.offset(x = nowOffsetDp.dp - 4.dp, y = 2.dp)
+                                    modifier = Modifier.offset(x = (nowOffsetDp - 4f).dp, y = 2.dp)
                                 )
                             }
 
@@ -241,8 +247,10 @@ fun EpgOverlay(
                                     isCurrentChannel = index == currentChannelIndex,
                                     isAlternate = index % 2 == 0,
                                     now = now,
-                                    nowOffsetDp = nowOffsetDp,
-                                    minutesPerPixel = MINUTES_PER_PIXEL,
+                                    windowStartSec = windowStart.epochSecond,
+                                    windowEndSec = windowEndSec,
+                                    totalWidthDp = totalWidthDp,
+                                    pxPerMin = PX_PER_MIN,
                                     rowHeight = ROW_HEIGHT
                                 )
                             }
@@ -270,8 +278,10 @@ private fun EpgRow(
     isCurrentChannel: Boolean,
     isAlternate: Boolean,
     now: Instant,
-    nowOffsetDp: Float,
-    minutesPerPixel: Float,
+    windowStartSec: Long,
+    windowEndSec: Long,
+    totalWidthDp: androidx.compose.ui.unit.Dp,
+    pxPerMin: Float,
     rowHeight: androidx.compose.ui.unit.Dp
 ) {
     val rowBg = when {
@@ -280,12 +290,16 @@ private fun EpgRow(
         isAlternate -> Color.White.copy(alpha = 0.015f)
         else -> Color.Transparent
     }
-    Row(modifier = Modifier.height(rowHeight).background(rowBg)) {
+    Box(
+        modifier = Modifier
+            .height(rowHeight)
+            .width(totalWidthDp)
+            .background(rowBg)
+    ) {
         if (programs.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .width(600.dp)
-                    .height(rowHeight)
+                    .fillMaxSize()
                     .padding(2.dp)
                     .clip(RoundedCornerShape(4.dp))
                     .background(Color.White.copy(alpha = 0.04f)),
@@ -300,10 +314,17 @@ private fun EpgRow(
             }
         } else {
             programs.forEach { program ->
-                val widthDp = (program.durationMinutes / minutesPerPixel).dp
+                val startSec = maxOf(program.startTime.epochSecond, windowStartSec)
+                val endSec = minOf(program.endTime.epochSecond, windowEndSec)
+                if (endSec <= windowStartSec || startSec >= windowEndSec) return@forEach
+
+                val xDp = ((startSec - windowStartSec) / 60f * pxPerMin).dp
+                val widthDp = ((endSec - startSec) / 60f * pxPerMin).dp.coerceAtLeast(2.dp)
                 val isLive = now.isAfter(program.startTime) && now.isBefore(program.endTime)
+
                 Box(
                     modifier = Modifier
+                        .offset(x = xDp)
                         .width(widthDp)
                         .height(rowHeight)
                         .padding(1.dp)
