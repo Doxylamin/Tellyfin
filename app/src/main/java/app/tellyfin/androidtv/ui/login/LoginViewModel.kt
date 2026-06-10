@@ -58,7 +58,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
             _state.value = s.copy(isLoading = true, error = null)
             try {
                 val (url, token, userId) = jellyfinRepo.authenticate(s.serverUrl, s.username, s.password)
-                prefsRepo.saveSession(url, token, userId)
+                prefsRepo.saveSession(url, token, userId, s.username)
                 jellyfinRepo.configure(url, token, userId)
                 _state.value = _state.value.copy(isLoading = false, isLoggedIn = true)
             } catch (e: Exception) {
