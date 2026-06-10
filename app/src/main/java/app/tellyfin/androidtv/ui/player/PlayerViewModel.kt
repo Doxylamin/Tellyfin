@@ -221,6 +221,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.value = state.copy(overlay = Overlay.ChannelContext(chIdx), channelContextMenuIndex = 2)
                 true
             }
+            state.overlay is Overlay.ChannelContext && state.isPlaying -> {
+                _uiState.value = state.copy(overlay = Overlay.ChannelList)
+                true
+            }
             state.overlay is Overlay.ChannelBanner -> {
                 bannerDismissJob?.cancel()
                 _uiState.value = state.copy(overlay = Overlay.None, highlightedIndex = state.currentIndex)
@@ -390,7 +394,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                                 state.favoriteChannelIds - ch.id
                             else
                                 state.favoriteChannelIds + ch.id
-                            _uiState.value = state.copy(favoriteChannelIds = updated, overlay = Overlay.None)
+                            val nextOverlay = if (state.isPlaying) Overlay.ChannelList else Overlay.None
+                            _uiState.value = state.copy(favoriteChannelIds = updated, overlay = nextOverlay)
                             viewModelScope.launch {
                                 prefsRepo.saveFavoriteIds(updated.map { it.toString() }.toSet())
                             }
@@ -406,7 +411,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 true
             }
-            KeyEvent.KEYCODE_DPAD_LEFT -> { dismissOverlay(); true }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                val nextOverlay = if (state.isPlaying) Overlay.ChannelList else Overlay.None
+                _uiState.value = state.copy(overlay = nextOverlay)
+                true
+            }
             else -> false
         }
     }
@@ -486,8 +495,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 true
             }
             KeyEvent.KEYCODE_MENU -> {
-                val ch = state.channels.getOrNull(state.highlightedIndex)
-                if (ch != null) toggleFavoriteNoClose(ch.id)
+                _uiState.value = state.copy(
+                    overlay = Overlay.ChannelContext(state.highlightedIndex),
+                    channelContextMenuIndex = 0
+                )
                 true
             }
             else -> false
