@@ -12,6 +12,7 @@ val Background = Color(0xFF0D0D0D)
 val Surface = Color(0xFF1A1A2E)
 val OnSurface = Color(0xFFE0E0E0)
 val Overlay = Color(0xCC0D0D0D)
+val Red = Color(0xFFE53935)
 
 object AppColors {
     val Purple = app.tellyfin.androidtv.ui.theme.Purple
@@ -20,6 +21,7 @@ object AppColors {
     val Surface = app.tellyfin.androidtv.ui.theme.Surface
     val OnSurface = app.tellyfin.androidtv.ui.theme.OnSurface
     val Overlay = app.tellyfin.androidtv.ui.theme.Overlay
+    val Red = app.tellyfin.androidtv.ui.theme.Red
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
