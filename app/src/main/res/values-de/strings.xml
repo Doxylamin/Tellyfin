@@ -73,8 +73,12 @@
 
     <!-- Settings screen -->
     <string name="settings">Einstellungen</string>
+    <string name="settings_section_account">Konto</string>
+    <string name="settings_section_streaming">Streaming</string>
     <string name="settings_bandwidth">Maximale Streaming-Bandbreite</string>
     <string name="settings_server">Server</string>
+    <string name="settings_username_label">Angemeldet als</string>
+    <string name="settings_logout">Abmelden</string>
     <string name="settings_hint">ZURÜCK zum Schließen · OK zum Anwenden der Bandbreite</string>
 
     <!-- Channel banner -->

@@ -73,8 +73,12 @@
 
     <!-- Settings screen -->
     <string name="settings">Settings</string>
+    <string name="settings_section_account">Account</string>
+    <string name="settings_section_streaming">Streaming</string>
     <string name="settings_bandwidth">Max Streaming Bandwidth</string>
     <string name="settings_server">Server</string>
+    <string name="settings_username_label">Signed in as</string>
+    <string name="settings_logout">Sign out</string>
     <string name="settings_hint">Press BACK to close · OK to apply bandwidth</string>
 
     <!-- Channel banner -->

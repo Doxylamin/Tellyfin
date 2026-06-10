@@ -9,6 +9,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -28,6 +29,10 @@ fun PlayerScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    LaunchedEffect(state.logoutRequested) {
+        if (state.logoutRequested) onLogOut()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -38,6 +43,7 @@ fun PlayerScreen(
             state.overlay is Overlay.Settings -> {
                 SettingsScreen(
                     serverUrl = viewModel.jellyfinRepo.baseUrl,
+                    username = state.username,
                     currentBitrate = state.maxBitrate,
                     highlightedIndex = state.highlightedMenuIndex,
                     modifier = Modifier.fillMaxSize()

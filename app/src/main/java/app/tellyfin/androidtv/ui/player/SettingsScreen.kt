@@ -9,20 +9,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.stringResource
 import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.ui.theme.AppColors
 
 @Composable
 fun SettingsScreen(
     serverUrl: String,
+    username: String,
     currentBitrate: Int?,
     highlightedIndex: Int,
     modifier: Modifier = Modifier
 ) {
+    val logoutIndex = BITRATE_OPTIONS.size
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -41,15 +44,32 @@ fun SettingsScreen(
                 color = Color.White,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 32.dp)
+                modifier = Modifier.padding(bottom = 36.dp)
             )
+
+            // ── Account section ──────────────────────────────────────────────
+            SectionHeader(stringResource(R.string.settings_section_account))
+
+            InfoRow(
+                label = stringResource(R.string.settings_server),
+                value = serverUrl.ifBlank { "—" }
+            )
+            Spacer(Modifier.height(6.dp))
+            InfoRow(
+                label = stringResource(R.string.settings_username_label),
+                value = username.ifBlank { "—" }
+            )
+
+            Spacer(Modifier.height(32.dp))
+
+            // ── Streaming section ────────────────────────────────────────────
+            SectionHeader(stringResource(R.string.settings_section_streaming))
 
             Text(
                 stringResource(R.string.settings_bandwidth),
-                color = AppColors.OnSurface.copy(alpha = 0.6f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 12.dp)
+                color = AppColors.OnSurface.copy(alpha = 0.55f),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 10.dp)
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -91,28 +111,74 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.weight(1f))
 
-            Text(
-                stringResource(R.string.settings_server),
-                color = AppColors.OnSurface.copy(alpha = 0.6f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Text(
-                serverUrl.ifBlank { "—" },
-                color = AppColors.OnSurface.copy(alpha = 0.8f),
-                fontSize = 14.sp
-            )
+            // ── Logout ───────────────────────────────────────────────────────
+            val isLogoutFocused = highlightedIndex == logoutIndex
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (isLogoutFocused) Modifier
+                            .background(AppColors.Red.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
+                            .border(1.dp, AppColors.Red.copy(alpha = 0.70f), RoundedCornerShape(8.dp))
+                        else Modifier
+                            .background(AppColors.Surface, RoundedCornerShape(8.dp))
+                            .border(1.dp, AppColors.OnSurface.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                    )
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
+            ) {
+                Text(
+                    stringResource(R.string.settings_logout),
+                    color = if (isLogoutFocused) AppColors.Red else AppColors.OnSurface.copy(alpha = 0.65f),
+                    fontSize = 15.sp,
+                    fontWeight = if (isLogoutFocused) FontWeight.SemiBold else FontWeight.Normal
+                )
+            }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             Text(
                 stringResource(R.string.settings_hint),
-                color = AppColors.OnSurface.copy(alpha = 0.35f),
+                color = AppColors.OnSurface.copy(alpha = 0.30f),
                 fontSize = 11.sp
             )
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        title,
+        color = AppColors.Purple,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.2.sp,
+        modifier = Modifier.padding(bottom = 10.dp)
+    )
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AppColors.Surface, RoundedCornerShape(8.dp))
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            color = AppColors.OnSurface.copy(alpha = 0.55f),
+            fontSize = 13.sp
+        )
+        Text(
+            value,
+            color = AppColors.OnSurface.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }

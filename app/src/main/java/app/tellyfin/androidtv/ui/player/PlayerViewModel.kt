@@ -70,6 +70,8 @@ data class PlayerUiState(
     val epgFocusedBlockIndex: Int = 0,
     val channelContextMenuIndex: Int = 0,
     val channelDetailsProgramIndex: Int = 0,
+    val username: String = "",
+    val logoutRequested: Boolean = false,
     val searchQuery: String = "",
     val searchResultIndex: Int = 0,
     val searchResults: List<SearchResult> = emptyList()
@@ -132,8 +134,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 .mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() }
                 .toSet()
 
+            val username = prefsRepo.username.first()
             jellyfinRepo.configure(url, token, userId)
-            _uiState.value = _uiState.value.copy(maxBitrate = maxBitrate, favoriteChannelIds = favIds)
+            _uiState.value = _uiState.value.copy(
+                maxBitrate = maxBitrate,
+                favoriteChannelIds = favIds,
+                username = username
+            )
             loadChannels(startIndex = lastIndex)
         }
     }
@@ -538,23 +545,37 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleSettingsKeys(keyCode: Int, state: PlayerUiState): Boolean {
+        val itemCount = BITRATE_OPTIONS.size + 1  // bandwidth options + logout
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
-                val size = BITRATE_OPTIONS.size
-                _uiState.value = state.copy(highlightedMenuIndex = (state.highlightedMenuIndex - 1 + size) % size)
+                _uiState.value = state.copy(
+                    highlightedMenuIndex = (state.highlightedMenuIndex - 1 + itemCount) % itemCount
+                )
                 true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                val size = BITRATE_OPTIONS.size
-                _uiState.value = state.copy(highlightedMenuIndex = (state.highlightedMenuIndex + 1) % size)
+                _uiState.value = state.copy(
+                    highlightedMenuIndex = (state.highlightedMenuIndex + 1) % itemCount
+                )
                 true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                val (bitrate, _) = BITRATE_OPTIONS[state.highlightedMenuIndex]
-                setMaxBitrate(bitrate)
+                if (state.highlightedMenuIndex == BITRATE_OPTIONS.size) {
+                    logOut()
+                } else {
+                    val (bitrate, _) = BITRATE_OPTIONS[state.highlightedMenuIndex]
+                    setMaxBitrate(bitrate)
+                }
                 true
             }
             else -> false
+        }
+    }
+
+    fun logOut() {
+        viewModelScope.launch {
+            prefsRepo.clearSession()
+            _uiState.value = _uiState.value.copy(logoutRequested = true)
         }
     }
 
