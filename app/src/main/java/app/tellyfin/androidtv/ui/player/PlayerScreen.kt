@@ -34,7 +34,7 @@ fun PlayerScreen(
     }
 
     if (state.isLoadingChannels) {
-        SplashScreen(modifier = Modifier.fillMaxSize())
+        SplashScreen(status = state.loadingStatus, modifier = Modifier.fillMaxSize())
         return
     }
 

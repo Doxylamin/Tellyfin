@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.sp
 import app.tellyfin.androidtv.ui.theme.AppColors
 
 @Composable
-fun SplashScreen(modifier: Modifier = Modifier) {
+fun SplashScreen(status: String = "", modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -67,6 +67,15 @@ fun SplashScreen(modifier: Modifier = Modifier) {
                 strokeWidth = 2.dp,
                 modifier = Modifier.size(22.dp)
             )
+
+            if (status.isNotBlank()) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    status,
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.38f)
+                )
+            }
         }
     }
 }

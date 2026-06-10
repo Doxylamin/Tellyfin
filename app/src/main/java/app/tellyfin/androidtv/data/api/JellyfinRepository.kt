@@ -90,7 +90,7 @@ class JellyfinRepository(private val context: Context) {
         }
     }
 
-    suspend fun getEpgPrograms(channelIds: List<UUID>, hoursAhead: Long = 6): Map<UUID, List<Program>> {
+    suspend fun getEpgPrograms(channelIds: List<UUID>, hoursAhead: Long = 8): Map<UUID, List<Program>> {
         val client = api ?: return emptyMap()
         val now = LocalDateTime.now()
         return try {
@@ -100,7 +100,8 @@ class JellyfinRepository(private val context: Context) {
                 userId = userUuid,
                 minEndDate = now,
                 maxStartDate = now.plusHours(hoursAhead),
-                enableImages = false
+                enableImages = false,
+                limit = channelIds.size * 20
             )
             result.content.items.orEmpty()
                 .mapNotNull { item ->

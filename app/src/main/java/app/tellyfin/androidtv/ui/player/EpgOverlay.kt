@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -26,17 +27,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.stringResource
 import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
@@ -65,7 +70,6 @@ fun EpgOverlay(
     val zoneId = remember { ZoneId.systemDefault() }
     val timeFmt = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(zoneId) }
 
-    // Window: previous 30-min mark → +5 h
     val windowStart = remember(now) {
         Instant.ofEpochSecond((now.epochSecond / 1800L) * 1800L - 1800L)
     }
@@ -80,10 +84,11 @@ fun EpgOverlay(
         if (visible) hScroll.scrollTo(initialScroll)
     }
 
-    val channelListState = rememberLazyListState()
+    val listState = rememberLazyListState()
     LaunchedEffect(highlightedRow, visible) {
         if (visible && channels.isNotEmpty()) {
-            channelListState.animateScrollToItem((highlightedRow - 3).coerceAtLeast(0))
+            // +1 because ruler is item 0; scroll so highlighted row has ~2 rows of context above
+            listState.animateScrollToItem((highlightedRow - 2).coerceAtLeast(0) + 1)
         }
     }
 
@@ -94,6 +99,11 @@ fun EpgOverlay(
             val label = timeFmt.format(Instant.ofEpochSecond(windowStart.epochSecond + i * 1800L))
             Pair(xDp, label)
         }
+    }
+
+    val density = LocalDensity.current
+    val nowLineX by remember(density, nowOffsetDp) {
+        derivedStateOf { with(density) { nowOffsetDp.dp - hScroll.value.toDp() } }
     }
 
     AnimatedVisibility(
@@ -128,11 +138,7 @@ fun EpgOverlay(
                         color = Color.White
                     )
                     Spacer(Modifier.width(12.dp))
-                    Text(
-                        "·",
-                        color = Color.White.copy(alpha = 0.25f),
-                        fontSize = 16.sp
-                    )
+                    Text("·", color = Color.White.copy(alpha = 0.25f), fontSize = 16.sp)
                     Spacer(Modifier.width(12.dp))
                     Text(
                         timeFmt.format(now),
@@ -148,7 +154,6 @@ fun EpgOverlay(
                     )
                 }
 
-                // Thin purple divider under header
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -156,117 +161,136 @@ fun EpgOverlay(
                         .background(AppColors.Purple.copy(alpha = 0.30f))
                 )
 
-                // Grid
-                Row(modifier = Modifier.weight(1f)) {
-                    // Fixed channel label column
-                    LazyColumn(
-                        state = channelListState,
-                        modifier = Modifier.width(CHANNEL_LABEL_WIDTH)
-                    ) {
-                        item { Spacer(modifier = Modifier.height(HEADER_HEIGHT)) }
-                        itemsIndexed(channels) { index, channel ->
-                            Box(
-                                modifier = Modifier
-                                    .width(CHANNEL_LABEL_WIDTH)
-                                    .height(ROW_HEIGHT)
-                                    .background(
-                                        when (index) {
-                                            highlightedRow -> AppColors.Purple.copy(alpha = 0.25f)
-                                            currentChannelIndex -> Color.White.copy(alpha = 0.05f)
-                                            else -> if (index % 2 == 0) Color.White.copy(alpha = 0.02f) else Color.Transparent
-                                        }
-                                    ),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                // Left accent for highlighted row
-                                if (index == highlightedRow) {
+                // Grid — single LazyColumn keeps channel labels and program rows vertically synced
+                Box(modifier = Modifier.weight(1f)) {
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                        // Ruler header
+                        item {
+                            Row(modifier = Modifier.fillMaxWidth().height(HEADER_HEIGHT)) {
+                                Spacer(Modifier.width(CHANNEL_LABEL_WIDTH))
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .horizontalScroll(hScroll)
+                                ) {
                                     Box(
                                         modifier = Modifier
-                                            .width(3.dp)
+                                            .width(totalWidthDp)
                                             .fillMaxHeight()
-                                            .background(AppColors.Purple)
-                                    )
+                                            .background(Color.White.copy(alpha = 0.03f))
+                                    ) {
+                                        ticks.forEach { (xDp, label) ->
+                                            Text(
+                                                label,
+                                                fontSize = 10.sp,
+                                                color = Color.White.copy(alpha = 0.45f),
+                                                modifier = Modifier
+                                                    .offset(x = xDp.dp)
+                                                    .padding(top = 6.dp, start = 4.dp)
+                                            )
+                                        }
+                                        Text(
+                                            "▼",
+                                            fontSize = 8.sp,
+                                            color = AppColors.Purple,
+                                            modifier = Modifier.offset(x = (nowOffsetDp - 4f).dp, y = 2.dp)
+                                        )
+                                    }
                                 }
-                                Column(modifier = Modifier.padding(start = 10.dp, end = 8.dp)) {
-                                    Text(
-                                        text = channel.name,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (index == highlightedRow) FontWeight.SemiBold else FontWeight.Normal,
-                                        color = if (index == highlightedRow) Color.White else Color.White.copy(alpha = 0.70f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = "${channel.number}",
-                                        fontSize = 10.sp,
-                                        color = AppColors.Purple.copy(alpha = 0.8f)
+                            }
+                        }
+
+                        // Channel rows
+                        itemsIndexed(channels) { index, channel ->
+                            val programs = epgData[channel.id.toString()].orEmpty()
+                            Row(modifier = Modifier.fillMaxWidth().height(ROW_HEIGHT)) {
+                                EpgChannelLabel(
+                                    channel = channel,
+                                    index = index,
+                                    highlightedRow = highlightedRow,
+                                    currentChannelIndex = currentChannelIndex
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .horizontalScroll(hScroll)
+                                ) {
+                                    EpgRow(
+                                        programs = programs,
+                                        isHighlighted = index == highlightedRow,
+                                        isCurrentChannel = index == currentChannelIndex,
+                                        isAlternate = index % 2 == 0,
+                                        now = now,
+                                        windowStartSec = windowStart.epochSecond,
+                                        windowEndSec = windowEndSec,
+                                        totalWidthDp = totalWidthDp,
+                                        pxPerMin = PX_PER_MIN,
+                                        rowHeight = ROW_HEIGHT
                                     )
                                 }
                             }
                         }
                     }
 
-                    // Scrollable program grid
-                    Box(modifier = Modifier.weight(1f)) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .horizontalScroll(hScroll)
-                        ) {
-                            // Time ruler — fixed width matching program rows
-                            Box(
-                                modifier = Modifier
-                                    .height(HEADER_HEIGHT)
-                                    .width(totalWidthDp)
-                                    .background(Color.White.copy(alpha = 0.03f))
-                            ) {
-                                ticks.forEach { (xDp, label) ->
-                                    Text(
-                                        text = label,
-                                        fontSize = 10.sp,
-                                        color = Color.White.copy(alpha = 0.45f),
-                                        modifier = Modifier
-                                            .offset(x = xDp.dp)
-                                            .padding(top = 6.dp, start = 4.dp)
-                                    )
-                                }
-                                Text(
-                                    text = "▼",
-                                    fontSize = 8.sp,
-                                    color = AppColors.Purple,
-                                    modifier = Modifier.offset(x = (nowOffsetDp - 4f).dp, y = 2.dp)
-                                )
-                            }
-
-                            // Program rows
-                            channels.forEachIndexed { index, channel ->
-                                val programs = epgData[channel.id.toString()].orEmpty()
-                                EpgRow(
-                                    programs = programs,
-                                    isHighlighted = index == highlightedRow,
-                                    isCurrentChannel = index == currentChannelIndex,
-                                    isAlternate = index % 2 == 0,
-                                    now = now,
-                                    windowStartSec = windowStart.epochSecond,
-                                    windowEndSec = windowEndSec,
-                                    totalWidthDp = totalWidthDp,
-                                    pxPerMin = PX_PER_MIN,
-                                    rowHeight = ROW_HEIGHT
-                                )
-                            }
-                        }
-
-                        // "Now" vertical line overlay on the grid
-                        Box(
-                            modifier = Modifier
-                                .offset(x = (nowOffsetDp - hScroll.value).dp)
-                                .width(1.dp)
-                                .fillMaxHeight()
-                                .background(AppColors.Purple.copy(alpha = 0.60f))
-                        )
-                    }
+                    // "Now" vertical line — fixed overlay, px→dp corrected
+                    Box(
+                        modifier = Modifier
+                            .padding(start = CHANNEL_LABEL_WIDTH)
+                            .offset(x = nowLineX)
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(AppColors.Purple.copy(alpha = 0.60f))
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EpgChannelLabel(
+    channel: Channel,
+    index: Int,
+    highlightedRow: Int,
+    currentChannelIndex: Int
+) {
+    Box(
+        modifier = Modifier
+            .width(CHANNEL_LABEL_WIDTH)
+            .height(ROW_HEIGHT)
+            .background(
+                when (index) {
+                    highlightedRow -> AppColors.Purple.copy(alpha = 0.25f)
+                    currentChannelIndex -> Color.White.copy(alpha = 0.05f)
+                    else -> if (index % 2 == 0) Color.White.copy(alpha = 0.02f) else Color.Transparent
+                }
+            ),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        if (index == highlightedRow) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(AppColors.Purple)
+            )
+        }
+        Column(modifier = Modifier.padding(start = 10.dp, end = 8.dp)) {
+            Text(
+                text = channel.name,
+                fontSize = 12.sp,
+                fontWeight = if (index == highlightedRow) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (index == highlightedRow) Color.White else Color.White.copy(alpha = 0.70f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${channel.number}",
+                fontSize = 10.sp,
+                color = AppColors.Purple.copy(alpha = 0.8f)
+            )
         }
     }
 }
@@ -280,9 +304,9 @@ private fun EpgRow(
     now: Instant,
     windowStartSec: Long,
     windowEndSec: Long,
-    totalWidthDp: androidx.compose.ui.unit.Dp,
+    totalWidthDp: Dp,
     pxPerMin: Float,
-    rowHeight: androidx.compose.ui.unit.Dp
+    rowHeight: Dp
 ) {
     val rowBg = when {
         isHighlighted -> AppColors.Purple.copy(alpha = 0.12f)
