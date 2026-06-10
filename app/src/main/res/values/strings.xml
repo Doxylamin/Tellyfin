@@ -79,7 +79,7 @@
     <string name="settings_server">Server</string>
     <string name="settings_username_label">Signed in as</string>
     <string name="settings_logout">Sign out</string>
-    <string name="settings_hint">Press BACK to close · OK to apply bandwidth</string>
+    <string name="settings_hint">↑↓ Navigate  ·  ◀▶ Change bandwidth  ·  BACK to close</string>
 
     <!-- Channel banner -->
     <string name="banner_preview_hint">OK to watch  ·  Back to cancel</string>

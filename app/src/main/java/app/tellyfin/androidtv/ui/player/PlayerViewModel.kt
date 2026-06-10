@@ -545,27 +545,32 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleSettingsKeys(keyCode: Int, state: PlayerUiState): Boolean {
-        val itemCount = BITRATE_OPTIONS.size + 1  // bandwidth options + logout
+        // Two rows: 0 = bandwidth selector, 1 = logout
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 _uiState.value = state.copy(
-                    highlightedMenuIndex = (state.highlightedMenuIndex - 1 + itemCount) % itemCount
+                    highlightedMenuIndex = (state.highlightedMenuIndex - 1 + 2) % 2
                 )
                 true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 _uiState.value = state.copy(
-                    highlightedMenuIndex = (state.highlightedMenuIndex + 1) % itemCount
+                    highlightedMenuIndex = (state.highlightedMenuIndex + 1) % 2
                 )
                 true
             }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (state.highlightedMenuIndex == BITRATE_OPTIONS.size) {
-                    logOut()
-                } else {
-                    val (bitrate, _) = BITRATE_OPTIONS[state.highlightedMenuIndex]
-                    setMaxBitrate(bitrate)
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (state.highlightedMenuIndex == 0) {
+                    val currentIdx = BITRATE_OPTIONS.indexOfFirst { it.first == state.maxBitrate }
+                        .takeIf { it >= 0 } ?: 0
+                    val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                    val newIdx = (currentIdx + delta + BITRATE_OPTIONS.size) % BITRATE_OPTIONS.size
+                    setMaxBitrate(BITRATE_OPTIONS[newIdx].first)
                 }
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                if (state.highlightedMenuIndex == 1) logOut()
                 true
             }
             else -> false
