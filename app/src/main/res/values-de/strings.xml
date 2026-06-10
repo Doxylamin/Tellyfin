@@ -79,7 +79,7 @@
     <string name="settings_server">Server</string>
     <string name="settings_username_label">Angemeldet als</string>
     <string name="settings_logout">Abmelden</string>
-    <string name="settings_hint">ZURÜCK zum Schließen · OK zum Anwenden der Bandbreite</string>
+    <string name="settings_hint">↑↓ Navigation  ·  ◀▶ Bandbreite ändern  ·  ZURÜCK zum Schließen</string>
 
     <!-- Channel banner -->
     <string name="banner_preview_hint">OK zum Ansehen  ·  Zurück zum Abbrechen</string>
