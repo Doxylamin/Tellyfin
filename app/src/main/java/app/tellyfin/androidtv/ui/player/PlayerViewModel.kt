@@ -600,7 +600,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 true
             }
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (state.highlightedMenuIndex == 0) {
+                if (state.highlightedMenuIndex == 2) {
                     val currentIdx = BITRATE_OPTIONS.indexOfFirst { it.first == state.maxBitrate }
                         .takeIf { it >= 0 } ?: 0
                     val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
@@ -611,12 +611,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 when (state.highlightedMenuIndex) {
+                    0 -> logOut()
                     1 -> when (state.updateStatus) {
                         is UpdateStatus.Available -> downloadUpdate((state.updateStatus as UpdateStatus.Available).version)
                         UpdateStatus.ReadyToInstall -> triggerInstall()
                         else -> Unit
                     }
-                    2 -> logOut()
                 }
                 true
             }
