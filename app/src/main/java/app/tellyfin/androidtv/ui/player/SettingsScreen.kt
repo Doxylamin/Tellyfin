@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.ui.theme.AppColors
 
-// highlightedIndex: 0 = bandwidth, 1 = update, 2 = logout
+// highlightedIndex: 0 = logout, 1 = update, 2 = bandwidth
 
 @Composable
 fun SettingsScreen(
@@ -58,23 +58,46 @@ fun SettingsScreen(
             // ── Account section ──────────────────────────────────────────────
             SectionHeader(stringResource(R.string.settings_section_account))
 
-            InfoRow(
-                label = stringResource(R.string.settings_server),
-                value = serverUrl.ifBlank { "—" }
-            )
+            InfoRow(label = stringResource(R.string.settings_server), value = serverUrl.ifBlank { "—" })
             Spacer(Modifier.height(6.dp))
-            InfoRow(
-                label = stringResource(R.string.settings_username_label),
-                value = username.ifBlank { "—" }
-            )
+            InfoRow(label = stringResource(R.string.settings_username_label), value = username.ifBlank { "—" })
             Spacer(Modifier.height(6.dp))
+
+            // Logout — index 0
+            val logoutFocused = highlightedIndex == 0
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (logoutFocused) Modifier
+                            .background(AppColors.Red.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
+                            .border(1.dp, AppColors.Red.copy(alpha = 0.70f), RoundedCornerShape(8.dp))
+                        else Modifier
+                            .background(AppColors.Surface, RoundedCornerShape(8.dp))
+                            .border(1.dp, AppColors.OnSurface.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                    )
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
+            ) {
+                Text(
+                    stringResource(R.string.settings_logout),
+                    color = if (logoutFocused) AppColors.Red else AppColors.OnSurface.copy(alpha = 0.65f),
+                    fontSize = 14.sp,
+                    fontWeight = if (logoutFocused) FontWeight.SemiBold else FontWeight.Normal
+                )
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            // ── App section ──────────────────────────────────────────────────
+            SectionHeader(stringResource(R.string.settings_section_app))
+
             InfoRow(
                 label = stringResource(R.string.settings_version),
                 value = if (appVersion.isNotBlank()) "v$appVersion" else "—"
             )
             Spacer(Modifier.height(6.dp))
 
-            // Update row
+            // Update — index 1
             val updateFocused = highlightedIndex == 1
             val isUpdateActionable = updateStatus is UpdateStatus.Available ||
                                      updateStatus == UpdateStatus.ReadyToInstall
@@ -177,8 +200,8 @@ fun SettingsScreen(
             // ── Streaming section ────────────────────────────────────────────
             SectionHeader(stringResource(R.string.settings_section_streaming))
 
-            // Bandwidth selector row
-            val bandwidthFocused = highlightedIndex == 0
+            // Bandwidth — index 2
+            val bandwidthFocused = highlightedIndex == 2
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -225,31 +248,6 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.weight(1f))
-
-            // ── Logout ───────────────────────────────────────────────────────
-            val logoutFocused = highlightedIndex == 2
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (logoutFocused) Modifier
-                            .background(AppColors.Red.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
-                            .border(1.dp, AppColors.Red.copy(alpha = 0.70f), RoundedCornerShape(8.dp))
-                        else Modifier
-                            .background(AppColors.Surface, RoundedCornerShape(8.dp))
-                            .border(1.dp, AppColors.OnSurface.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                    )
-                    .padding(horizontal = 20.dp, vertical = 14.dp)
-            ) {
-                Text(
-                    stringResource(R.string.settings_logout),
-                    color = if (logoutFocused) AppColors.Red else AppColors.OnSurface.copy(alpha = 0.65f),
-                    fontSize = 15.sp,
-                    fontWeight = if (logoutFocused) FontWeight.SemiBold else FontWeight.Normal
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
 
             Text(
                 stringResource(R.string.settings_hint),
