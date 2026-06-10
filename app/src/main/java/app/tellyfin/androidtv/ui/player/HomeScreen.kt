@@ -9,7 +9,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -65,8 +64,9 @@ import kotlinx.coroutines.delay
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
 private val dateFmt = DateTimeFormatter.ofPattern("EEE dd.MM").withZone(ZoneId.systemDefault())
 
-private const val EPG_PX_PER_MIN = 0.5f
-private const val EPG_VISIBLE_HOURS = 4L
+// 4 dp per minute → 1 hour = 240 dp, 5-hour window = 1200 dp total
+private const val EPG_PX_PER_MIN = 4.0f
+private const val EPG_WINDOW_MINUTES = 300  // 5 hours
 private val EPG_ROW_HEIGHT = 52.dp
 private val EPG_RULER_HEIGHT = 32.dp
 private val EPG_CHANNEL_COL_WIDTH = 72.dp
@@ -615,15 +615,31 @@ private fun HomeEpgGrid(
     isSectionFocused: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val nowOffsetDp = (now.epochSecond / 60f) * (1f / EPG_PX_PER_MIN)
-    val gridScrollOffset = (nowOffsetDp - 60f).coerceAtLeast(0f)
+    // Window: previous 30-min mark → +5 h.  "now" is always 30–60 min in.
+    val windowStart = remember(now) {
+        Instant.ofEpochSecond((now.epochSecond / 1800L) * 1800L - 1800L)
+    }
+    val windowEndSec = windowStart.epochSecond + EPG_WINDOW_MINUTES * 60L
+    val totalWidthDp = (EPG_WINDOW_MINUTES * EPG_PX_PER_MIN).dp  // 1200 dp
 
-    val hScroll = rememberScrollState(initial = gridScrollOffset.roundToInt())
+    // "Now" position relative to window start
+    val nowOffsetDp = ((now.epochSecond - windowStart.epochSecond) / 60f) * EPG_PX_PER_MIN
+
+    // Tick marks every 30 min
+    val ticks = remember(windowStart) {
+        val count = EPG_WINDOW_MINUTES / 30 + 1
+        (0 until count).map { i ->
+            val xDp = i * 30f * EPG_PX_PER_MIN
+            val label = timeFmt.format(Instant.ofEpochSecond(windowStart.epochSecond + i * 1800L))
+            Pair(xDp, label)
+        }
+    }
+
+    val initialScroll = remember { ((nowOffsetDp - 100f).coerceAtLeast(0f)).roundToInt() }
+    val hScroll = rememberScrollState(initial = initialScroll)
     val channelListState = rememberLazyListState()
 
-    LaunchedEffect(Unit) {
-        hScroll.scrollTo(gridScrollOffset.roundToInt())
-    }
+    LaunchedEffect(Unit) { hScroll.scrollTo(initialScroll) }
 
     val highlightedDisplayedIndex = channels.indexOfFirst { it.id == highlightedChannelId }
     LaunchedEffect(highlightedDisplayedIndex, isSectionFocused) {
@@ -632,17 +648,7 @@ private fun HomeEpgGrid(
         }
     }
 
-    val startEpoch = now.epochSecond - (now.epochSecond % 1800)
-    val ticks = (0..EPG_VISIBLE_HOURS * 2).map { i ->
-        val tickEpoch = startEpoch + i * 1800
-        val xDp = (tickEpoch / 60f) * (1f / EPG_PX_PER_MIN)
-        val label = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
-            .format(Instant.ofEpochSecond(tickEpoch))
-        Pair(xDp, label)
-    }
-
     Column(modifier = modifier) {
-        // "On now" label + date
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -722,11 +728,11 @@ private fun HomeEpgGrid(
                         .fillMaxSize()
                         .horizontalScroll(hScroll)
                 ) {
-                    // Time ruler
+                    // Time ruler — same width as program rows
                     Box(
                         modifier = Modifier
                             .height(EPG_RULER_HEIGHT)
-                            .width(IntrinsicSize.Max)
+                            .width(totalWidthDp)
                             .background(Color.White.copy(alpha = 0.025f))
                     ) {
                         ticks.forEach { (xDp, label) ->
@@ -739,12 +745,11 @@ private fun HomeEpgGrid(
                                     .padding(top = 9.dp, start = 4.dp)
                             )
                         }
-                        // Red ▼ marker at current time
                         Text(
                             "▼",
                             fontSize = 9.sp,
                             color = AppColors.Red,
-                            modifier = Modifier.offset(x = nowOffsetDp.dp - 4.dp, y = 4.dp)
+                            modifier = Modifier.offset(x = (nowOffsetDp - 4f).dp, y = 4.dp)
                         )
                     }
 
@@ -758,7 +763,10 @@ private fun HomeEpgGrid(
                             isAlternate = index % 2 == 0,
                             focusedBlockIndex = if (isHighlighted) epgFocusedBlockIndex else -1,
                             now = now,
-                            minutesPerPixel = EPG_PX_PER_MIN,
+                            windowStartSec = windowStart.epochSecond,
+                            windowEndSec = windowEndSec,
+                            totalWidthDp = totalWidthDp,
+                            pxPerMin = EPG_PX_PER_MIN,
                             rowHeight = EPG_ROW_HEIGHT
                         )
                     }
@@ -784,7 +792,10 @@ private fun HomeEpgRow(
     isAlternate: Boolean,
     focusedBlockIndex: Int,
     now: Instant,
-    minutesPerPixel: Float,
+    windowStartSec: Long,
+    windowEndSec: Long,
+    totalWidthDp: Dp,
+    pxPerMin: Float,
     rowHeight: Dp
 ) {
     val rowBg = when {
@@ -792,12 +803,16 @@ private fun HomeEpgRow(
         isAlternate -> Color.White.copy(alpha = 0.015f)
         else -> Color.Transparent
     }
-    Row(modifier = Modifier.height(rowHeight).background(rowBg)) {
+    Box(
+        modifier = Modifier
+            .height(rowHeight)
+            .width(totalWidthDp)
+            .background(rowBg)
+    ) {
         if (programs.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .width(600.dp)
-                    .height(rowHeight)
+                    .fillMaxSize()
                     .padding(2.dp)
                     .clip(RoundedCornerShape(4.dp))
                     .background(Color.White.copy(alpha = 0.03f)),
@@ -812,12 +827,20 @@ private fun HomeEpgRow(
             }
         } else {
             programs.forEachIndexed { blockIdx, program ->
-                val widthDp = (program.durationMinutes / minutesPerPixel).dp
+                // Clip to visible window
+                val startSec = maxOf(program.startTime.epochSecond, windowStartSec)
+                val endSec = minOf(program.endTime.epochSecond, windowEndSec)
+                if (endSec <= windowStartSec || startSec >= windowEndSec) return@forEachIndexed
+
+                val xDp = ((startSec - windowStartSec) / 60f * pxPerMin).dp
+                val widthDp = ((endSec - startSec) / 60f * pxPerMin).dp.coerceAtLeast(2.dp)
+
                 val isLive = now.isAfter(program.startTime) && now.isBefore(program.endTime)
                 val isBlockFocused = isHighlighted && blockIdx == focusedBlockIndex
 
                 Box(
                     modifier = Modifier
+                        .offset(x = xDp)
                         .width(widthDp)
                         .height(rowHeight)
                         .padding(1.dp)

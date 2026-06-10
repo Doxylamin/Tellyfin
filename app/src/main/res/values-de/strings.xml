@@ -13,6 +13,15 @@
     <string name="epg_ok_hint">OK: Kanal wechseln</string>
     <string name="epg_on_now">Jetzt</string>
 
+    <!-- Channel context menu (MENU key on EPG row) -->
+    <string name="context_play">Abspielen</string>
+    <string name="context_details">Details</string>
+    <string name="context_back_hint">← Zurück zum Schließen</string>
+
+    <!-- Channel details overlay -->
+    <string name="details_title">Programmführer</string>
+    <string name="details_hint">↑↓ Navigation  ·  OK Ansehen  ·  ← Zurück</string>
+
     <!-- Home screen -->
     <string name="now_playing">Läuft jetzt</string>
     <string name="no_favorites_hint_cards">Noch keine Lieblingskanäle · Menu-Taste auf einem Kanal drücken</string>

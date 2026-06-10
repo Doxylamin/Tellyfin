@@ -30,6 +30,10 @@ sealed class Overlay {
     object Settings : Overlay()
     object Search : Overlay()
     data class ZapInput(val digits: String) : Overlay()
+    /** MENU key on EPG row — sidebar with Play / Favorite / Details */
+    data class ChannelContext(val channelIndex: Int) : Overlay()
+    /** "Details" in ChannelContext — single-channel programme list */
+    data class ChannelDetails(val channelIndex: Int) : Overlay()
 }
 
 sealed class SearchResult {
@@ -64,6 +68,8 @@ data class PlayerUiState(
     val homeNavTabIndex: Int = NAV_LIVE,
     val nowPlayingCardIndex: Int = 0,
     val epgFocusedBlockIndex: Int = 0,
+    val channelContextMenuIndex: Int = 0,
+    val channelDetailsProgramIndex: Int = 0,
     val searchQuery: String = "",
     val searchResultIndex: Int = 0,
     val searchResults: List<SearchResult> = emptyList()
@@ -193,6 +199,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             state.overlay is Overlay.NowPlaying -> handleNowPlayingKeys(keyCode, state)
             state.overlay is Overlay.QuickMenu -> handleQuickMenuKeys(keyCode, state)
             state.overlay is Overlay.Settings -> handleSettingsKeys(keyCode, state)
+            state.overlay is Overlay.ChannelContext -> handleChannelContextKeys(keyCode, state)
+            state.overlay is Overlay.ChannelDetails -> handleChannelDetailsKeys(keyCode, state)
             !state.isPlaying -> handleHomeKeys(keyCode, state)
             else -> handlePlayerKeys(keyCode, state)
         }
@@ -201,6 +209,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun handleBack(state: PlayerUiState): Boolean {
         return when {
             state.overlay is Overlay.Search -> { clearSearch(); true }
+            state.overlay is Overlay.ChannelDetails -> {
+                val chIdx = (state.overlay as Overlay.ChannelDetails).channelIndex
+                _uiState.value = state.copy(overlay = Overlay.ChannelContext(chIdx), channelContextMenuIndex = 2)
+                true
+            }
             state.overlay is Overlay.ChannelBanner -> {
                 bannerDismissJob?.cancel()
                 _uiState.value = state.copy(overlay = Overlay.None, highlightedIndex = state.currentIndex)
@@ -332,12 +345,90 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     startPlaying(state.highlightedIndex); true
                 }
                 KeyEvent.KEYCODE_MENU -> {
-                    val ch = state.channels.getOrNull(state.highlightedIndex)
-                    if (ch != null) toggleFavoriteNoClose(ch.id)
+                    _uiState.value = state.copy(
+                        overlay = Overlay.ChannelContext(state.highlightedIndex),
+                        channelContextMenuIndex = 0
+                    )
                     true
                 }
                 KeyEvent.KEYCODE_SEARCH -> { openSearch(); true }
                 else -> false
+            }
+            else -> false
+        }
+    }
+
+    private fun handleChannelContextKeys(keyCode: Int, state: PlayerUiState): Boolean {
+        val chIdx = (state.overlay as Overlay.ChannelContext).channelIndex
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                _uiState.value = state.copy(
+                    channelContextMenuIndex = (state.channelContextMenuIndex - 1 + 3) % 3
+                )
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                _uiState.value = state.copy(
+                    channelContextMenuIndex = (state.channelContextMenuIndex + 1) % 3
+                )
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                when (state.channelContextMenuIndex) {
+                    0 -> startPlaying(chIdx)
+                    1 -> {
+                        val ch = state.channels.getOrNull(chIdx)
+                        if (ch != null) {
+                            val updated = if (ch.id in state.favoriteChannelIds)
+                                state.favoriteChannelIds - ch.id
+                            else
+                                state.favoriteChannelIds + ch.id
+                            _uiState.value = state.copy(favoriteChannelIds = updated, overlay = Overlay.None)
+                            viewModelScope.launch {
+                                prefsRepo.saveFavoriteIds(updated.map { it.toString() }.toSet())
+                            }
+                        }
+                    }
+                    2 -> {
+                        _uiState.value = state.copy(
+                            overlay = Overlay.ChannelDetails(chIdx),
+                            channelDetailsProgramIndex = 0
+                        )
+                        state.channels.getOrNull(chIdx)?.id?.let { loadEpgForChannel(it) }
+                    }
+                }
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> { dismissOverlay(); true }
+            else -> false
+        }
+    }
+
+    private fun handleChannelDetailsKeys(keyCode: Int, state: PlayerUiState): Boolean {
+        val chIdx = (state.overlay as Overlay.ChannelDetails).channelIndex
+        val programs = state.channels.getOrNull(chIdx)
+            ?.let { state.epgData[it.id.toString()].orEmpty() } ?: emptyList()
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                val n = (state.channelDetailsProgramIndex - 1).coerceAtLeast(0)
+                _uiState.value = state.copy(channelDetailsProgramIndex = n)
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                val n = (state.channelDetailsProgramIndex + 1)
+                    .coerceAtMost((programs.size - 1).coerceAtLeast(0))
+                _uiState.value = state.copy(channelDetailsProgramIndex = n)
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                startPlaying(chIdx); true
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                _uiState.value = state.copy(
+                    overlay = Overlay.ChannelContext(chIdx),
+                    channelContextMenuIndex = 2
+                )
+                true
             }
             else -> false
         }
