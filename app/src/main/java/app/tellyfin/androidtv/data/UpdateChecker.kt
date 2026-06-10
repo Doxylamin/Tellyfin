@@ -11,7 +11,7 @@ class UpdateChecker(private val context: Context) {
 
     companion object {
         private const val VERSION_URL = "https://tellyfin.app/.version.txt"
-        private const val GITHUB_DOWNLOAD = "https://github.com/Doxylamin/Tellyfin/releases/download"
+        private const val DOWNLOAD_URL = "https://tellyfin.app/download"
     }
 
     suspend fun fetchLatestVersion(): String? = withContext(Dispatchers.IO) {
@@ -34,20 +34,14 @@ class UpdateChecker(private val context: Context) {
         return false
     }
 
-    fun apkUrl(version: String): String {
-        val tag = if (version.startsWith("v")) version else "v$version"
-        val bare = tag.trimStart('v')
-        return "$GITHUB_DOWNLOAD/$tag/tellyfin-$bare.apk"
-    }
-
     suspend fun downloadApk(
-        version: String,
+        @Suppress("UNUSED_PARAMETER") version: String,
         onProgress: (Int) -> Unit
     ): File? = withContext(Dispatchers.IO) {
         try {
             val dir = File(context.cacheDir, "apk_updates").also { it.mkdirs() }
             val dest = File(dir, "tellyfin-update.apk")
-            val conn = URL(apkUrl(version)).openConnection() as HttpURLConnection
+            val conn = URL(DOWNLOAD_URL).openConnection() as HttpURLConnection
             conn.connectTimeout = 15_000
             conn.readTimeout = 120_000
             conn.instanceFollowRedirects = true
