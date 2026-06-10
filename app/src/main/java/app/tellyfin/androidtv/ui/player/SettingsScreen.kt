@@ -42,10 +42,8 @@ fun SettingsScreen(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxHeight()
                 .width(560.dp)
-                .padding(vertical = 48.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
+                .padding(vertical = 48.dp)
         ) {
             Text(
                 stringResource(R.string.settings),
@@ -247,7 +245,7 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(24.dp))
 
             Text(
                 stringResource(R.string.settings_hint),
