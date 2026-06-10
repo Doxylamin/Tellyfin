@@ -32,10 +32,13 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.ScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -615,17 +618,14 @@ private fun HomeEpgGrid(
     isSectionFocused: Boolean,
     modifier: Modifier = Modifier
 ) {
-    // Window: previous 30-min mark → +5 h.  "now" is always 30–60 min in.
     val windowStart = remember(now) {
         Instant.ofEpochSecond((now.epochSecond / 1800L) * 1800L - 1800L)
     }
     val windowEndSec = windowStart.epochSecond + EPG_WINDOW_MINUTES * 60L
-    val totalWidthDp = (EPG_WINDOW_MINUTES * EPG_PX_PER_MIN).dp  // 1200 dp
+    val totalWidthDp = (EPG_WINDOW_MINUTES * EPG_PX_PER_MIN).dp
 
-    // "Now" position relative to window start
     val nowOffsetDp = ((now.epochSecond - windowStart.epochSecond) / 60f) * EPG_PX_PER_MIN
 
-    // Tick marks every 30 min
     val ticks = remember(windowStart) {
         val count = EPG_WINDOW_MINUTES / 30 + 1
         (0 until count).map { i ->
@@ -637,15 +637,22 @@ private fun HomeEpgGrid(
 
     val initialScroll = remember { ((nowOffsetDp - 100f).coerceAtLeast(0f)).roundToInt() }
     val hScroll = rememberScrollState(initial = initialScroll)
-    val channelListState = rememberLazyListState()
+    val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { hScroll.scrollTo(initialScroll) }
 
     val highlightedDisplayedIndex = channels.indexOfFirst { it.id == highlightedChannelId }
     LaunchedEffect(highlightedDisplayedIndex, isSectionFocused) {
         if (isSectionFocused && channels.isNotEmpty() && highlightedDisplayedIndex >= 0) {
-            channelListState.animateScrollToItem((highlightedDisplayedIndex - 2).coerceAtLeast(0))
+            // +1 because ruler is item 0
+            listState.animateScrollToItem((highlightedDisplayedIndex - 1).coerceAtLeast(0) + 1)
         }
+    }
+
+    // Convert scroll pixels → dp for the fixed-position "now" line overlay
+    val density = LocalDensity.current
+    val nowLineX by remember(density, nowOffsetDp) {
+        derivedStateOf { with(density) { nowOffsetDp.dp - hScroll.value.toDp() } }
     }
 
     Column(modifier = modifier) {
@@ -670,117 +677,131 @@ private fun HomeEpgGrid(
             )
         }
 
-        Row(modifier = Modifier.weight(1f)) {
-            // Fixed channel logo column
-            LazyColumn(
-                state = channelListState,
-                modifier = Modifier.width(EPG_CHANNEL_COL_WIDTH)
-            ) {
-                item { Spacer(Modifier.height(EPG_RULER_HEIGHT)) }
+        Box(modifier = Modifier.weight(1f)) {
+            // Single LazyColumn: ruler + channel rows (vertical scroll synced automatically)
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                // Ruler header
+                item {
+                    Row(modifier = Modifier.fillMaxWidth().height(EPG_RULER_HEIGHT)) {
+                        Spacer(Modifier.width(EPG_CHANNEL_COL_WIDTH))
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .horizontalScroll(hScroll)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(totalWidthDp)
+                                    .fillMaxHeight()
+                                    .background(Color.White.copy(alpha = 0.025f))
+                            ) {
+                                ticks.forEach { (xDp, label) ->
+                                    Text(
+                                        label,
+                                        fontSize = 10.sp,
+                                        color = Color.White.copy(alpha = 0.42f),
+                                        modifier = Modifier
+                                            .offset(x = xDp.dp)
+                                            .padding(top = 9.dp, start = 4.dp)
+                                    )
+                                }
+                                // ▼ marker sits inside the scrollable ruler, aligned to content
+                                Text(
+                                    "▼",
+                                    fontSize = 9.sp,
+                                    color = AppColors.Red,
+                                    modifier = Modifier.offset(x = (nowOffsetDp - 4f).dp, y = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                // Channel + program rows — same LazyColumn keeps them vertically in sync
                 itemsIndexed(channels) { index, channel ->
                     val isHighlighted = isSectionFocused && channel.id == highlightedChannelId
-                    Box(
-                        modifier = Modifier
-                            .width(EPG_CHANNEL_COL_WIDTH)
-                            .height(EPG_ROW_HEIGHT)
-                            .background(
-                                when {
-                                    isHighlighted -> Color.White.copy(alpha = 0.10f)
-                                    index % 2 == 0 -> Color.White.copy(alpha = 0.015f)
-                                    else -> Color.Transparent
-                                }
-                            ),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        if (isHighlighted) {
-                            Box(Modifier.width(3.dp).fillMaxHeight().background(AppColors.Purple))
-                        }
-                        Row(
-                            modifier = Modifier.padding(start = 8.dp, end = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    val programs = epgData[channel.id.toString()].orEmpty()
+                    Row(modifier = Modifier.fillMaxWidth().height(EPG_ROW_HEIGHT)) {
+                        EpgChannelCell(channel = channel, isHighlighted = isHighlighted, isAlternate = index % 2 == 0)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .horizontalScroll(hScroll)
                         ) {
-                            Text(
-                                "${channel.number}",
-                                fontSize = 9.sp,
-                                color = if (isHighlighted) AppColors.Purple else AppColors.Purple.copy(alpha = 0.55f),
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(20.dp)
-                            )
-                            AsyncImage(
-                                model = channel.logoUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(Color.White.copy(alpha = 0.06f))
+                            HomeEpgRow(
+                                programs = programs,
+                                isHighlighted = isHighlighted,
+                                isAlternate = index % 2 == 0,
+                                focusedBlockIndex = if (isHighlighted) epgFocusedBlockIndex else -1,
+                                now = now,
+                                windowStartSec = windowStart.epochSecond,
+                                windowEndSec = windowEndSec,
+                                totalWidthDp = totalWidthDp,
+                                pxPerMin = EPG_PX_PER_MIN,
+                                rowHeight = EPG_ROW_HEIGHT
                             )
                         }
                     }
                 }
             }
 
-            // Scrollable timeline + program rows
-            Box(modifier = Modifier.weight(1f)) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .horizontalScroll(hScroll)
-                ) {
-                    // Time ruler — same width as program rows
-                    Box(
-                        modifier = Modifier
-                            .height(EPG_RULER_HEIGHT)
-                            .width(totalWidthDp)
-                            .background(Color.White.copy(alpha = 0.025f))
-                    ) {
-                        ticks.forEach { (xDp, label) ->
-                            Text(
-                                label,
-                                fontSize = 10.sp,
-                                color = Color.White.copy(alpha = 0.42f),
-                                modifier = Modifier
-                                    .offset(x = xDp.dp)
-                                    .padding(top = 9.dp, start = 4.dp)
-                            )
-                        }
-                        Text(
-                            "▼",
-                            fontSize = 9.sp,
-                            color = AppColors.Red,
-                            modifier = Modifier.offset(x = (nowOffsetDp - 4f).dp, y = 4.dp)
-                        )
-                    }
+            // Red "now" line — fixed overlay, correctly offset using px→dp conversion
+            Box(
+                modifier = Modifier
+                    .padding(start = EPG_CHANNEL_COL_WIDTH)
+                    .offset(x = nowLineX)
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(AppColors.Red.copy(alpha = 0.75f))
+            )
+        }
+    }
+}
 
-                    // Program rows
-                    channels.forEachIndexed { index, channel ->
-                        val isHighlighted = isSectionFocused && channel.id == highlightedChannelId
-                        val programs = epgData[channel.id.toString()].orEmpty()
-                        HomeEpgRow(
-                            programs = programs,
-                            isHighlighted = isHighlighted,
-                            isAlternate = index % 2 == 0,
-                            focusedBlockIndex = if (isHighlighted) epgFocusedBlockIndex else -1,
-                            now = now,
-                            windowStartSec = windowStart.epochSecond,
-                            windowEndSec = windowEndSec,
-                            totalWidthDp = totalWidthDp,
-                            pxPerMin = EPG_PX_PER_MIN,
-                            rowHeight = EPG_ROW_HEIGHT
-                        )
-                    }
+@Composable
+private fun EpgChannelCell(
+    channel: Channel,
+    isHighlighted: Boolean,
+    isAlternate: Boolean
+) {
+    Box(
+        modifier = Modifier
+            .width(EPG_CHANNEL_COL_WIDTH)
+            .height(EPG_ROW_HEIGHT)
+            .background(
+                when {
+                    isHighlighted -> Color.White.copy(alpha = 0.10f)
+                    isAlternate -> Color.White.copy(alpha = 0.015f)
+                    else -> Color.Transparent
                 }
-
-                // Red vertical "now" line
-                Box(
-                    modifier = Modifier
-                        .offset(x = (nowOffsetDp - hScroll.value).dp)
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(AppColors.Red.copy(alpha = 0.75f))
-                )
-            }
+            ),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        if (isHighlighted) {
+            Box(Modifier.width(3.dp).fillMaxHeight().background(AppColors.Purple))
+        }
+        Row(
+            modifier = Modifier.padding(start = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                "${channel.number}",
+                fontSize = 9.sp,
+                color = if (isHighlighted) AppColors.Purple else AppColors.Purple.copy(alpha = 0.55f),
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(20.dp)
+            )
+            AsyncImage(
+                model = channel.logoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color.White.copy(alpha = 0.06f))
+            )
         }
     }
 }

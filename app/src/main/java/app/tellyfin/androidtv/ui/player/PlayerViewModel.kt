@@ -53,6 +53,7 @@ const val NAV_SEARCH   = 2
 const val NAV_SETTINGS = 3
 
 data class PlayerUiState(
+    val isLoadingChannels: Boolean = true,
     val channels: List<Channel> = emptyList(),
     val currentIndex: Int = 0,
     val highlightedIndex: Int = 0,
@@ -150,6 +151,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             val channels = jellyfinRepo.getChannels()
             val safeIndex = startIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
             _uiState.value = _uiState.value.copy(
+                isLoadingChannels = false,
                 channels = channels,
                 currentIndex = safeIndex,
                 highlightedIndex = safeIndex,
@@ -158,7 +160,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             )
             loadEpg()
         } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(error = "Failed to load channels: ${e.message}")
+            _uiState.value = _uiState.value.copy(
+                isLoadingChannels = false,
+                error = "Failed to load channels: ${e.message}"
+            )
         }
     }
 

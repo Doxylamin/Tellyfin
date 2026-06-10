@@ -33,6 +33,11 @@ fun PlayerScreen(
         if (state.logoutRequested) onLogOut()
     }
 
+    if (state.isLoadingChannels) {
+        SplashScreen(modifier = Modifier.fillMaxSize())
+        return
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
