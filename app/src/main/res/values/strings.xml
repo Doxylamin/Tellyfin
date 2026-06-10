@@ -16,7 +16,7 @@
     <!-- Channel context menu (MENU key on EPG row) -->
     <string name="context_play">Play</string>
     <string name="context_details">Details</string>
-    <string name="context_back_hint">← Back to close</string>
+    <string name="context_back_hint">← Close</string>
 
     <!-- Channel details overlay -->
     <string name="details_title">Programme Guide</string>
@@ -24,22 +24,22 @@
 
     <!-- Home screen -->
     <string name="now_playing">Now Playing</string>
-    <string name="no_favorites_hint_cards">No favourite channels yet · Press Menu on a channel</string>
+    <string name="no_favorites_hint_cards">No favourite channels yet  ·  Press MENU on a channel</string>
     <string name="no_favorites_title">No favourite channels</string>
-    <string name="no_favorites_hint">Press Menu on a channel</string>
+    <string name="no_favorites_hint">Press MENU on a channel</string>
     <string name="filter_all">All Channels</string>
     <string name="filter_favorites">Favourites (%1$d)</string>
-    <string name="filter_search">🔍  Search</string>
-    <string name="home_hint">↑↓ Navigate    OK Watch    ← → Cards    Menu ★ Favourite    🔍 Search</string>
+    <string name="filter_search">Search</string>
+    <string name="home_hint">↑↓ Navigate  ·  OK Watch  ·  MENU Options</string>
 
     <!-- Channel list overlay -->
     <string name="channels">Channels</string>
-    <string name="channel_list_hint">%1$d channels  ·  ← close  Menu ★</string>
+    <string name="channel_list_hint">%1$d channels  ·  ← Close  ·  MENU Favourite</string>
     <string name="now_badge">NOW</string>
 
     <!-- Search overlay -->
     <string name="search">Search</string>
-    <string name="search_back_hint">Back to close</string>
+    <string name="search_back_hint">← Close</string>
     <string name="search_placeholder">Search channels and programmes…</string>
     <string name="search_empty_title">Search channels and programmes</string>
     <string name="search_empty_hint">Type on the keyboard · Results appear here</string>
@@ -51,7 +51,7 @@
 
     <!-- Now playing overlay -->
     <string name="live_badge">LIVE</string>
-    <string name="now_playing_dismiss_hint">Press OK or ← to dismiss</string>
+    <string name="now_playing_dismiss_hint">OK  ·  ← Dismiss</string>
     <string name="no_program_info">No program information available</string>
     <string name="up_next">Up next</string>
     <string name="minutes_remaining">%1$dm remaining</string>
@@ -68,7 +68,7 @@
 
     <!-- EPG overlay -->
     <string name="guide">Guide</string>
-    <string name="epg_hint">↑↓ Navigate  ·  OK Watch</string>
+    <string name="epg_hint">↑↓ Navigate  ·  ← → Scroll  ·  OK Watch</string>
     <string name="no_data">No data</string>
 
     <!-- Settings screen -->
@@ -82,5 +82,5 @@
     <string name="settings_hint">↑↓ Navigate  ·  ◀▶ Change bandwidth  ·  BACK to close</string>
 
     <!-- Channel banner -->
-    <string name="banner_preview_hint">OK to watch  ·  Back to cancel</string>
+    <string name="banner_preview_hint">OK Watch  ·  ← Cancel</string>
 </resources>
