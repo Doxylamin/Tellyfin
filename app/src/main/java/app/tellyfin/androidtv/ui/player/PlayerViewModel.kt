@@ -339,7 +339,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         val newCh = sorted[cur - 1]
                         _uiState.value = state.copy(
                             highlightedIndex = state.channels.indexOf(newCh),
-                            epgFocusedBlockIndex = 0
+                            epgFocusedBlockIndex = currentProgramIndex(newCh.id, state.epgData)
                         )
                     }
                     true
@@ -351,7 +351,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         val newCh = sorted[cur + 1]
                         _uiState.value = state.copy(
                             highlightedIndex = state.channels.indexOf(newCh),
-                            epgFocusedBlockIndex = 0
+                            epgFocusedBlockIndex = currentProgramIndex(newCh.id, state.epgData)
                         )
                     }
                     true
@@ -601,6 +601,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun currentProgramIndex(channelId: UUID, epgData: Map<String, List<Program>>): Int {
+        val now = java.time.Instant.now()
+        val programs = epgData[channelId.toString()].orEmpty()
+        val idx = programs.indexOfFirst { it.startTime <= now && it.endTime > now }
+        return if (idx >= 0) idx else 0
+    }
+
     fun logOut() {
         viewModelScope.launch {
             prefsRepo.clearSession()
@@ -831,7 +838,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setMaxBitrate(bitrate: Int?) {
-        _uiState.value = _uiState.value.copy(maxBitrate = bitrate, overlay = Overlay.None)
+        _uiState.value = _uiState.value.copy(maxBitrate = bitrate)
         viewModelScope.launch { prefsRepo.saveMaxBitrate(bitrate) }
     }
 

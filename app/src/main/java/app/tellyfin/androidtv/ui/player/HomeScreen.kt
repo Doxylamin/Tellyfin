@@ -588,6 +588,37 @@ private fun EpgHeroSection(
                                 )
                             }
                         }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        val duration = (program.endTime.epochSecond - program.startTime.epochSecond).coerceAtLeast(1)
+                        val elapsed = (now.epochSecond - program.startTime.epochSecond).coerceIn(0, duration)
+                        val remaining = ((duration - elapsed) / 60).toInt()
+                        val progress = elapsed.toFloat() / duration.toFloat()
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "${timeFmt.format(program.startTime)} – ${timeFmt.format(program.endTime)}",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.55f)
+                            )
+                            Text(
+                                "${remaining} min",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.55f)
+                            )
+                        }
+                        Spacer(Modifier.height(5.dp))
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
+                            color = AppColors.Red,
+                            trackColor = Color.White.copy(alpha = 0.15f)
+                        )
                     }
                 }
             }
@@ -640,6 +671,16 @@ private fun HomeEpgGrid(
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { hScroll.scrollTo(initialScroll) }
+
+    // Scroll horizontally to keep the focused program block visible
+    LaunchedEffect(epgFocusedBlockIndex, isSectionFocused) {
+        if (!isSectionFocused) return@LaunchedEffect
+        val programs = epgData[highlightedChannelId?.toString()].orEmpty()
+        val program = programs.getOrNull(epgFocusedBlockIndex) ?: return@LaunchedEffect
+        val blockStartDp = ((program.startTime.epochSecond - windowStart.epochSecond) / 60f) * EPG_PX_PER_MIN
+        val target = (blockStartDp - 80f).coerceAtLeast(0f).roundToInt()
+        hScroll.animateScrollTo(target)
+    }
 
     val highlightedDisplayedIndex = channels.indexOfFirst { it.id == highlightedChannelId }
     LaunchedEffect(highlightedDisplayedIndex, isSectionFocused) {
