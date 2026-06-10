@@ -67,69 +67,11 @@ fun SettingsScreen(
                 label = stringResource(R.string.settings_username_label),
                 value = username.ifBlank { "—" }
             )
-
-            Spacer(Modifier.height(32.dp))
-
-            // ── Streaming section ────────────────────────────────────────────
-            SectionHeader(stringResource(R.string.settings_section_streaming))
-
-            // Bandwidth selector row
-            val bandwidthFocused = highlightedIndex == 0
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (bandwidthFocused) Modifier
-                            .background(AppColors.Purple.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
-                            .border(1.dp, AppColors.Purple, RoundedCornerShape(8.dp))
-                        else Modifier
-                            .background(AppColors.Surface, RoundedCornerShape(8.dp))
-                            .border(1.dp, AppColors.OnSurface.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-                    )
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    stringResource(R.string.settings_bandwidth),
-                    color = if (bandwidthFocused) Color.White else AppColors.OnSurface.copy(alpha = 0.70f),
-                    fontSize = 14.sp,
-                    fontWeight = if (bandwidthFocused) FontWeight.SemiBold else FontWeight.Normal
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        "◀",
-                        color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.30f),
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        currentLabel,
-                        color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.80f),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.widthIn(min = 72.dp),
-                    )
-                    Text(
-                        "▶",
-                        color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.30f),
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(32.dp))
-
-            // ── App section ──────────────────────────────────────────────────
-            SectionHeader(stringResource(R.string.settings_section_app))
-
+            Spacer(Modifier.height(6.dp))
             InfoRow(
                 label = stringResource(R.string.settings_version),
                 value = if (appVersion.isNotBlank()) "v$appVersion" else "—"
             )
-
             Spacer(Modifier.height(6.dp))
 
             // Update row
@@ -167,14 +109,12 @@ fun SettingsScreen(
                     updateStatus is UpdateStatus.Error -> AppColors.Red.copy(alpha = 0.80f)
                     else -> AppColors.OnSurface.copy(alpha = 0.55f)
                 }
-
                 Text(
                     "Update",
                     color = labelColor,
                     fontSize = 14.sp,
                     fontWeight = if (updateFocused) FontWeight.SemiBold else FontWeight.Normal
                 )
-
                 when (updateStatus) {
                     UpdateStatus.Idle, UpdateStatus.UpToDate ->
                         Text(
@@ -229,6 +169,58 @@ fun SettingsScreen(
                             stringResource(R.string.settings_update_error),
                             color = valueColor, fontSize = 12.sp
                         )
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            // ── Streaming section ────────────────────────────────────────────
+            SectionHeader(stringResource(R.string.settings_section_streaming))
+
+            // Bandwidth selector row
+            val bandwidthFocused = highlightedIndex == 0
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (bandwidthFocused) Modifier
+                            .background(AppColors.Purple.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
+                            .border(1.dp, AppColors.Purple, RoundedCornerShape(8.dp))
+                        else Modifier
+                            .background(AppColors.Surface, RoundedCornerShape(8.dp))
+                            .border(1.dp, AppColors.OnSurface.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                    )
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    stringResource(R.string.settings_bandwidth),
+                    color = if (bandwidthFocused) Color.White else AppColors.OnSurface.copy(alpha = 0.70f),
+                    fontSize = 14.sp,
+                    fontWeight = if (bandwidthFocused) FontWeight.SemiBold else FontWeight.Normal
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "◀",
+                        color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.30f),
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        currentLabel,
+                        color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.80f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.widthIn(min = 72.dp),
+                    )
+                    Text(
+                        "▶",
+                        color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.30f),
+                        fontSize = 12.sp
+                    )
                 }
             }
 
