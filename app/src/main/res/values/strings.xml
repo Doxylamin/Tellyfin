@@ -2,6 +2,17 @@
 <resources>
     <string name="app_name">Tellyfin</string>
 
+    <!-- Home screen nav tabs -->
+    <string name="nav_for_you">For You</string>
+    <string name="nav_live">Live</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Home screen EPG hero -->
+    <string name="epg_title">Program Guide</string>
+    <string name="epg_ok_hint">OK: Switch channel</string>
+    <string name="epg_on_now">On now</string>
+
     <!-- Home screen -->
     <string name="now_playing">Now Playing</string>
     <string name="no_favorites_hint_cards">No favourite channels yet · Press Menu on a channel</string>

@@ -38,14 +38,15 @@ sealed class SearchResult {
 }
 
 // homeFocusSection values
-const val HOME_SECTION_CARDS = 0
-const val HOME_SECTION_FILTER = 1
-const val HOME_SECTION_CHANNELS = 2
+const val HOME_SECTION_NAV      = 0
+const val HOME_SECTION_CAROUSEL = 1   // For You tab: featured cards
+const val HOME_SECTION_EPG      = 2   // Live tab: EPG grid rows
 
-// filterTab values
-const val FILTER_ALL = 0
-const val FILTER_FAVORITES = 1
-const val FILTER_SEARCH = 2
+// homeNavTabIndex values
+const val NAV_FOR_YOU  = 0
+const val NAV_LIVE     = 1
+const val NAV_SEARCH   = 2
+const val NAV_SETTINGS = 3
 
 data class PlayerUiState(
     val channels: List<Channel> = emptyList(),
@@ -59,16 +60,17 @@ data class PlayerUiState(
     val favoriteChannelIds: Set<UUID> = emptySet(),
     val highlightedMenuIndex: Int = 0,
     val maxBitrate: Int? = null,
-    val homeFocusSection: Int = HOME_SECTION_CARDS,
-    val filterTab: Int = FILTER_ALL,
+    val homeFocusSection: Int = HOME_SECTION_EPG,
+    val homeNavTabIndex: Int = NAV_LIVE,
     val nowPlayingCardIndex: Int = 0,
+    val epgFocusedBlockIndex: Int = 0,
     val searchQuery: String = "",
     val searchResultIndex: Int = 0,
     val searchResults: List<SearchResult> = emptyList()
 ) {
     val currentChannel: Channel? get() = channels.getOrNull(currentIndex)
     val highlightedChannel: Channel? get() = channels.getOrNull(highlightedIndex)
-    val showFavoritesOnly: Boolean get() = filterTab == FILTER_FAVORITES
+    val showFavoritesOnly: Boolean get() = homeNavTabIndex == NAV_FOR_YOU
 
     fun displayedChannels(): List<Channel> =
         if (showFavoritesOnly) channels.filter { it.id in favoriteChannelIds }
@@ -212,7 +214,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     isPlaying = false,
                     overlay = Overlay.None,
                     highlightedIndex = state.currentIndex,
-                    homeFocusSection = HOME_SECTION_CARDS,
+                    homeFocusSection = HOME_SECTION_EPG,
                     nowPlayingCardIndex = state.currentIndex.coerceIn(0, (state.channels.size - 1).coerceAtLeast(0))
                 )
                 true
@@ -223,11 +225,45 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun handleHomeKeys(keyCode: Int, state: PlayerUiState): Boolean {
         return when (state.homeFocusSection) {
-            HOME_SECTION_CARDS -> when (keyCode) {
+            HOME_SECTION_NAV -> when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    val n = (state.homeNavTabIndex - 1).coerceAtLeast(0)
+                    _uiState.value = state.copy(homeNavTabIndex = n, nowPlayingCardIndex = 0)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    val n = (state.homeNavTabIndex + 1).coerceAtMost(NAV_SETTINGS)
+                    _uiState.value = state.copy(homeNavTabIndex = n, nowPlayingCardIndex = 0)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    val next = if (state.homeNavTabIndex == NAV_FOR_YOU) HOME_SECTION_CAROUSEL else HOME_SECTION_EPG
+                    _uiState.value = state.copy(homeFocusSection = next)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    when (state.homeNavTabIndex) {
+                        NAV_SEARCH -> openSearch()
+                        NAV_SETTINGS -> _uiState.value = state.copy(overlay = Overlay.Settings)
+                        else -> {
+                            val next = if (state.homeNavTabIndex == NAV_FOR_YOU) HOME_SECTION_CAROUSEL else HOME_SECTION_EPG
+                            _uiState.value = state.copy(homeFocusSection = next)
+                        }
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_SEARCH -> { openSearch(); true }
+                else -> false
+            }
+            HOME_SECTION_CAROUSEL -> when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    _uiState.value = state.copy(homeFocusSection = HOME_SECTION_NAV)
+                    true
+                }
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
                     val displayed = state.displayedChannels()
                     if (displayed.isEmpty()) return false
-                    val n = (state.nowPlayingCardIndex - 1 + displayed.size) % displayed.size
+                    val n = (state.nowPlayingCardIndex - 1).coerceAtLeast(0)
                     val chIdx = state.channels.indexOf(displayed[n])
                     _uiState.value = state.copy(
                         nowPlayingCardIndex = n,
@@ -238,16 +274,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     val displayed = state.displayedChannels()
                     if (displayed.isEmpty()) return false
-                    val n = (state.nowPlayingCardIndex + 1) % displayed.size
+                    val n = (state.nowPlayingCardIndex + 1).coerceAtMost(displayed.size - 1)
                     val chIdx = state.channels.indexOf(displayed[n])
                     _uiState.value = state.copy(
                         nowPlayingCardIndex = n,
                         highlightedIndex = if (chIdx >= 0) chIdx else state.highlightedIndex
                     )
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    _uiState.value = state.copy(homeFocusSection = HOME_SECTION_FILTER)
                     true
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
@@ -260,43 +292,18 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 KeyEvent.KEYCODE_SEARCH -> { openSearch(); true }
                 else -> false
             }
-            HOME_SECTION_FILTER -> when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP -> {
-                    _uiState.value = state.copy(homeFocusSection = HOME_SECTION_CARDS)
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (state.filterTab == FILTER_SEARCH) openSearch()
-                    else _uiState.value = state.copy(homeFocusSection = HOME_SECTION_CHANNELS)
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    val n = (state.filterTab - 1).coerceAtLeast(0)
-                    _uiState.value = state.copy(filterTab = n, nowPlayingCardIndex = 0)
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    val n = (state.filterTab + 1).coerceAtMost(FILTER_SEARCH)
-                    _uiState.value = state.copy(filterTab = n, nowPlayingCardIndex = 0)
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    if (state.filterTab == FILTER_SEARCH) openSearch()
-                    else _uiState.value = state.copy(homeFocusSection = HOME_SECTION_CHANNELS)
-                    true
-                }
-                KeyEvent.KEYCODE_SEARCH -> { openSearch(); true }
-                else -> false
-            }
-            HOME_SECTION_CHANNELS -> when (keyCode) {
+            HOME_SECTION_EPG -> when (keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     val sorted = state.sortedChannels()
                     val cur = sorted.indexOf(state.channels.getOrNull(state.highlightedIndex))
                     if (cur <= 0) {
-                        _uiState.value = state.copy(homeFocusSection = HOME_SECTION_FILTER)
+                        _uiState.value = state.copy(homeFocusSection = HOME_SECTION_NAV)
                     } else {
                         val newCh = sorted[cur - 1]
-                        _uiState.value = state.copy(highlightedIndex = state.channels.indexOf(newCh))
+                        _uiState.value = state.copy(
+                            highlightedIndex = state.channels.indexOf(newCh),
+                            epgFocusedBlockIndex = 0
+                        )
                     }
                     true
                 }
@@ -305,8 +312,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     val cur = sorted.indexOf(state.channels.getOrNull(state.highlightedIndex))
                     if (cur < sorted.size - 1) {
                         val newCh = sorted[cur + 1]
-                        _uiState.value = state.copy(highlightedIndex = state.channels.indexOf(newCh))
+                        _uiState.value = state.copy(
+                            highlightedIndex = state.channels.indexOf(newCh),
+                            epgFocusedBlockIndex = 0
+                        )
                     }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    val n = (state.epgFocusedBlockIndex - 1).coerceAtLeast(0)
+                    _uiState.value = state.copy(epgFocusedBlockIndex = n)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    _uiState.value = state.copy(epgFocusedBlockIndex = state.epgFocusedBlockIndex + 1)
                     true
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {

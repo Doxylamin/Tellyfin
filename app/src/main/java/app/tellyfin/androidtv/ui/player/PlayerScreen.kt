@@ -51,9 +51,10 @@ fun PlayerScreen(
                     highlightedIndex = state.highlightedIndex,
                     epgData = state.epgData,
                     favoriteChannelIds = state.favoriteChannelIds,
-                    filterTab = state.filterTab,
+                    homeNavTabIndex = state.homeNavTabIndex,
                     homeFocusSection = state.homeFocusSection,
-                    nowPlayingCardIndex = state.nowPlayingCardIndex
+                    nowPlayingCardIndex = state.nowPlayingCardIndex,
+                    epgFocusedBlockIndex = state.epgFocusedBlockIndex
                 )
             }
 
