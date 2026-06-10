@@ -34,7 +34,7 @@
 
     <!-- Channel list overlay -->
     <string name="channels">Channels</string>
-    <string name="channel_list_hint">%1$d channels  ·  ← Close  ·  MENU Favourite</string>
+    <string name="channel_list_hint">%1$d channels  ·  ← Close  ·  MENU Options</string>
     <string name="now_badge">NOW</string>
 
     <!-- Search overlay -->

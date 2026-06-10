@@ -154,7 +154,7 @@ fun PlayerScreen(
         val contextChannelIndex = (state.overlay as? Overlay.ChannelContext)?.channelIndex ?: 0
         val contextChannel = state.channels.getOrNull(contextChannelIndex)
         ChannelContextDrawer(
-            visible = !state.isPlaying && state.overlay is Overlay.ChannelContext,
+            visible = state.overlay is Overlay.ChannelContext,
             channel = contextChannel,
             isFavorite = contextChannel?.id?.let { it in state.favoriteChannelIds } ?: false,
             currentProgram = contextChannel?.let { ch ->
@@ -169,7 +169,7 @@ fun PlayerScreen(
         val detailsChannelIndex = (state.overlay as? Overlay.ChannelDetails)?.channelIndex ?: 0
         val detailsChannel = state.channels.getOrNull(detailsChannelIndex)
         ChannelDetailsOverlay(
-            visible = !state.isPlaying && state.overlay is Overlay.ChannelDetails,
+            visible = state.overlay is Overlay.ChannelDetails,
             channel = detailsChannel,
             programs = detailsChannel?.let { state.epgData[it.id.toString()].orEmpty() } ?: emptyList(),
             focusedIndex = state.channelDetailsProgramIndex,
