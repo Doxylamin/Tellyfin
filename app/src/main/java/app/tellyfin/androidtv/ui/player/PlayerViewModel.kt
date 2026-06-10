@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import app.tellyfin.androidtv.BuildConfig
+import app.tellyfin.androidtv.data.UpdateChecker
 import app.tellyfin.androidtv.data.api.JellyfinRepository
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.UUID
 
 sealed class Overlay {
@@ -76,7 +79,9 @@ data class PlayerUiState(
     val logoutRequested: Boolean = false,
     val searchQuery: String = "",
     val searchResultIndex: Int = 0,
-    val searchResults: List<SearchResult> = emptyList()
+    val searchResults: List<SearchResult> = emptyList(),
+    val updateStatus: UpdateStatus = UpdateStatus.Idle,
+    val pendingInstallFile: File? = null
 ) {
     val currentChannel: Channel? get() = channels.getOrNull(currentIndex)
     val highlightedChannel: Channel? get() = channels.getOrNull(highlightedIndex)
@@ -93,6 +98,16 @@ data class PlayerUiState(
     }
 }
 
+sealed class UpdateStatus {
+    object Idle : UpdateStatus()
+    object Checking : UpdateStatus()
+    object UpToDate : UpdateStatus()
+    data class Available(val version: String) : UpdateStatus()
+    data class Downloading(val progress: Int) : UpdateStatus()
+    object ReadyToInstall : UpdateStatus()
+    data class Error(val message: String) : UpdateStatus()
+}
+
 val BITRATE_OPTIONS = listOf(
     null to "Auto",
     2_000_000 to "2 Mbps",
@@ -107,6 +122,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val prefsRepo = PreferencesRepository(application)
     val jellyfinRepo = JellyfinRepository(application)
+    private val updateChecker = UpdateChecker(application)
 
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(application).build().also { player ->
         player.addListener(object : Player.Listener {
@@ -281,7 +297,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                     when (state.homeNavTabIndex) {
                         NAV_SEARCH -> openSearch()
-                        NAV_SETTINGS -> _uiState.value = state.copy(overlay = Overlay.Settings)
+                        NAV_SETTINGS -> openSettings()
                         else -> {
                             val next = if (state.homeNavTabIndex == NAV_FOR_YOU) HOME_SECTION_CAROUSEL else HOME_SECTION_EPG
                             _uiState.value = state.copy(homeFocusSection = next)
@@ -564,22 +580,22 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         when (index) {
             0 -> toggleFavorite(channelId)
             1 -> refreshStream()
-            2 -> _uiState.value = state.copy(overlay = Overlay.Settings)
+            2 -> openSettings()
         }
     }
 
     private fun handleSettingsKeys(keyCode: Int, state: PlayerUiState): Boolean {
-        // Two rows: 0 = bandwidth selector, 1 = logout
+        // Rows: 0 = bandwidth, 1 = update, 2 = logout
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 _uiState.value = state.copy(
-                    highlightedMenuIndex = (state.highlightedMenuIndex - 1 + 2) % 2
+                    highlightedMenuIndex = (state.highlightedMenuIndex - 1 + 3) % 3
                 )
                 true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 _uiState.value = state.copy(
-                    highlightedMenuIndex = (state.highlightedMenuIndex + 1) % 2
+                    highlightedMenuIndex = (state.highlightedMenuIndex + 1) % 3
                 )
                 true
             }
@@ -594,7 +610,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (state.highlightedMenuIndex == 1) logOut()
+                when (state.highlightedMenuIndex) {
+                    1 -> when (state.updateStatus) {
+                        is UpdateStatus.Available -> downloadUpdate((state.updateStatus as UpdateStatus.Available).version)
+                        UpdateStatus.ReadyToInstall -> triggerInstall()
+                        else -> Unit
+                    }
+                    2 -> logOut()
+                }
                 true
             }
             else -> false
@@ -606,6 +629,49 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val programs = epgData[channelId.toString()].orEmpty()
         val idx = programs.indexOfFirst { it.startTime <= now && it.endTime > now }
         return if (idx >= 0) idx else 0
+    }
+
+    private fun openSettings() {
+        _uiState.value = _uiState.value.copy(overlay = Overlay.Settings, highlightedMenuIndex = 0)
+        checkForUpdate()
+    }
+
+    private fun checkForUpdate() {
+        if (_uiState.value.updateStatus is UpdateStatus.Checking ||
+            _uiState.value.updateStatus is UpdateStatus.Downloading) return
+        _uiState.value = _uiState.value.copy(updateStatus = UpdateStatus.Checking)
+        viewModelScope.launch {
+            val remote = updateChecker.fetchLatestVersion()
+            _uiState.value = if (remote == null) {
+                _uiState.value.copy(updateStatus = UpdateStatus.Error("Could not reach update server"))
+            } else if (updateChecker.isNewer(remote, BuildConfig.VERSION_NAME)) {
+                _uiState.value.copy(updateStatus = UpdateStatus.Available(remote))
+            } else {
+                _uiState.value.copy(updateStatus = UpdateStatus.UpToDate)
+            }
+        }
+    }
+
+    private fun downloadUpdate(version: String) {
+        _uiState.value = _uiState.value.copy(updateStatus = UpdateStatus.Downloading(0))
+        viewModelScope.launch {
+            val file = updateChecker.downloadApk(version) { progress ->
+                _uiState.value = _uiState.value.copy(updateStatus = UpdateStatus.Downloading(progress))
+            }
+            _uiState.value = if (file != null) {
+                _uiState.value.copy(updateStatus = UpdateStatus.ReadyToInstall, pendingInstallFile = file)
+            } else {
+                _uiState.value.copy(updateStatus = UpdateStatus.Error("Download failed"))
+            }
+        }
+    }
+
+    private fun triggerInstall() {
+        // pendingInstallFile is already set; PlayerScreen observes it and launches the intent
+    }
+
+    fun clearPendingInstall() {
+        _uiState.value = _uiState.value.copy(pendingInstallFile = null)
     }
 
     fun logOut() {
