@@ -132,6 +132,7 @@ class JellyfinRepository(private val context: Context) {
             }
                 .awaitAll()
                 .flatten()
+                .distinctBy { it.id }
                 .groupBy { it.channelId }
         }
     }
