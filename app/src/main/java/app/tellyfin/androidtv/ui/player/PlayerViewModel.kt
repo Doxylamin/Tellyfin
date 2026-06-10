@@ -13,8 +13,10 @@ import app.tellyfin.androidtv.data.api.JellyfinRepository
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
 import app.tellyfin.androidtv.data.prefs.PreferencesRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -270,6 +272,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     homeFocusSection = HOME_SECTION_EPG,
                     nowPlayingCardIndex = state.currentIndex.coerceIn(0, (state.channels.size - 1).coerceAtLeast(0))
                 )
+                true
+            }
+            state.homeFocusSection != HOME_SECTION_NAV -> {
+                _uiState.value = state.copy(homeFocusSection = HOME_SECTION_NAV)
                 true
             }
             else -> false
@@ -720,13 +726,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private var searchJob: Job? = null
+
     fun updateSearchQuery(query: String) {
-        val results = computeSearchResults(query, _uiState.value)
-        _uiState.value = _uiState.value.copy(
-            searchQuery = query,
-            searchResults = results,
-            searchResultIndex = 0
-        )
+        // Update the query immediately so the text field stays responsive
+        _uiState.value = _uiState.value.copy(searchQuery = query, searchResultIndex = 0)
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.value = _uiState.value.copy(searchResults = emptyList())
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(300)
+            val results = withContext(Dispatchers.Default) {
+                computeSearchResults(query, _uiState.value)
+            }
+            _uiState.value = _uiState.value.copy(searchResults = results)
+        }
     }
 
     private fun computeSearchResults(query: String, state: PlayerUiState): List<SearchResult> {
