@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.ui.PlayerView
@@ -216,6 +217,7 @@ fun PlayerScreen(
 @Composable
 private fun VideoPlayer(viewModel: PlayerViewModel) {
     val context = LocalContext.current
+    val view = LocalView.current
     AndroidView(
         factory = {
             PlayerView(context).apply {
@@ -228,7 +230,8 @@ private fun VideoPlayer(viewModel: PlayerViewModel) {
         modifier = Modifier.fillMaxSize()
     )
     DisposableEffect(Unit) {
-        onDispose { /* player lifecycle managed by ViewModel */ }
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
     }
 }
 
