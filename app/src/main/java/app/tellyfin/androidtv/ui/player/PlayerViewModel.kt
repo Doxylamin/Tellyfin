@@ -83,7 +83,9 @@ data class PlayerUiState(
     val searchResultIndex: Int = 0,
     val searchResults: List<SearchResult> = emptyList(),
     val updateStatus: UpdateStatus = UpdateStatus.Idle,
-    val pendingInstallFile: File? = null
+    val pendingInstallFile: File? = null,
+    val bitratePickerOpen: Boolean = false,
+    val bitratePickerIndex: Int = 0
 ) {
     val currentChannel: Channel? get() = channels.getOrNull(currentIndex)
     val highlightedChannel: Channel? get() = channels.getOrNull(highlightedIndex)
@@ -246,6 +248,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun handleBack(state: PlayerUiState): Boolean {
         return when {
+            state.bitratePickerOpen -> {
+                _uiState.value = state.copy(bitratePickerOpen = false)
+                true
+            }
             state.overlay is Overlay.Search -> { clearSearch(); true }
             state.overlay is Overlay.ChannelDetails -> {
                 val chIdx = (state.overlay as Overlay.ChannelDetails).channelIndex
@@ -591,7 +597,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleSettingsKeys(keyCode: Int, state: PlayerUiState): Boolean {
-        // Rows: 0 = bandwidth, 1 = update, 2 = logout
+        // Rows: 0 = logout, 1 = update, 2 = bandwidth
+        if (state.bitratePickerOpen) {
+            return when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    _uiState.value = state.copy(
+                        bitratePickerIndex = (state.bitratePickerIndex - 1 + BITRATE_OPTIONS.size) % BITRATE_OPTIONS.size
+                    )
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    _uiState.value = state.copy(
+                        bitratePickerIndex = (state.bitratePickerIndex + 1) % BITRATE_OPTIONS.size
+                    )
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    setMaxBitrate(BITRATE_OPTIONS[state.bitratePickerIndex].first)
+                    _uiState.value = _uiState.value.copy(bitratePickerOpen = false)
+                    true
+                }
+                else -> false
+            }
+        }
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 _uiState.value = state.copy(
@@ -605,16 +633,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 true
             }
-            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (state.highlightedMenuIndex == 2) {
-                    val currentIdx = BITRATE_OPTIONS.indexOfFirst { it.first == state.maxBitrate }
-                        .takeIf { it >= 0 } ?: 0
-                    val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
-                    val newIdx = (currentIdx + delta + BITRATE_OPTIONS.size) % BITRATE_OPTIONS.size
-                    setMaxBitrate(BITRATE_OPTIONS[newIdx].first)
-                }
-                true
-            }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 when (state.highlightedMenuIndex) {
                     0 -> logOut()
@@ -622,6 +640,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         is UpdateStatus.Available -> downloadUpdate((state.updateStatus as UpdateStatus.Available).version)
                         UpdateStatus.ReadyToInstall -> triggerInstall()
                         else -> Unit
+                    }
+                    2 -> {
+                        val currentIdx = BITRATE_OPTIONS.indexOfFirst { it.first == state.maxBitrate }
+                            .takeIf { it >= 0 } ?: 0
+                        _uiState.value = state.copy(bitratePickerOpen = true, bitratePickerIndex = currentIdx)
                     }
                 }
                 true
@@ -638,7 +661,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun openSettings() {
-        _uiState.value = _uiState.value.copy(overlay = Overlay.Settings, highlightedMenuIndex = 0)
+        _uiState.value = _uiState.value.copy(overlay = Overlay.Settings, highlightedMenuIndex = 0, bitratePickerOpen = false)
         checkForUpdate()
     }
 
@@ -882,7 +905,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun dismissOverlay() {
-        _uiState.value = _uiState.value.copy(overlay = Overlay.None)
+        _uiState.value = _uiState.value.copy(overlay = Overlay.None, bitratePickerOpen = false)
     }
 
     fun showChannelBanner() {
