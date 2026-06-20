@@ -29,6 +29,8 @@ fun SettingsScreen(
     highlightedIndex: Int,
     updateStatus: UpdateStatus = UpdateStatus.Idle,
     appVersion: String = "",
+    bitratePickerOpen: Boolean = false,
+    bitratePickerIndex: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val currentLabel = BITRATE_OPTIONS.firstOrNull { it.first == currentBitrate }?.second
@@ -223,24 +225,18 @@ fun SettingsScreen(
                 )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        "◀",
-                        color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.30f),
-                        fontSize = 12.sp
-                    )
                     Text(
                         currentLabel,
                         color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.80f),
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.widthIn(min = 72.dp),
+                        fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "▶",
-                        color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.30f),
-                        fontSize = 12.sp
+                        "›",
+                        color = if (bandwidthFocused) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.35f),
+                        fontSize = 16.sp
                     )
                 }
             }
@@ -252,6 +248,58 @@ fun SettingsScreen(
                 color = AppColors.OnSurface.copy(alpha = 0.30f),
                 fontSize = 11.sp
             )
+        }
+
+        if (bitratePickerOpen) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.72f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(300.dp)
+                        .background(AppColors.Surface, RoundedCornerShape(12.dp))
+                        .border(1.dp, AppColors.OnSurface.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                        .padding(vertical = 20.dp, horizontal = 20.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.settings_bandwidth),
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 14.dp)
+                    )
+                    BITRATE_OPTIONS.forEachIndexed { idx, (_, label) ->
+                        val isHighlighted = idx == bitratePickerIndex
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (isHighlighted) Modifier
+                                        .background(AppColors.Purple.copy(alpha = 0.22f), RoundedCornerShape(6.dp))
+                                        .border(1.dp, AppColors.Purple, RoundedCornerShape(6.dp))
+                                    else Modifier
+                                )
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                label,
+                                color = if (isHighlighted) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.75f),
+                                fontSize = 14.sp,
+                                fontWeight = if (isHighlighted) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                            if (isHighlighted) {
+                                Text("●", color = AppColors.Purple, fontSize = 8.sp)
+                            }
+                        }
+                        if (idx < BITRATE_OPTIONS.size - 1) Spacer(Modifier.height(3.dp))
+                    }
+                }
+            }
         }
     }
 }

@@ -87,7 +87,7 @@
     <string name="settings_update_downloading">Downloading… %d%%</string>
     <string name="settings_update_ready">OK to install</string>
     <string name="settings_update_error">Update check failed</string>
-    <string name="settings_hint">↑↓ Navigate  ·  ◀▶ Change bandwidth  ·  BACK to close</string>
+    <string name="settings_hint">↑↓ Navigate  ·  OK to select  ·  BACK to close</string>
 
     <!-- Channel banner -->
     <string name="banner_preview_hint">OK Watch  ·  ← Cancel</string>

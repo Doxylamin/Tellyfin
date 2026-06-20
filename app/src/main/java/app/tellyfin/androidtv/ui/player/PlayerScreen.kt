@@ -63,6 +63,8 @@ fun PlayerScreen(
                     highlightedIndex = state.highlightedMenuIndex,
                     updateStatus = state.updateStatus,
                     appVersion = BuildConfig.VERSION_NAME,
+                    bitratePickerOpen = state.bitratePickerOpen,
+                    bitratePickerIndex = state.bitratePickerIndex,
                     modifier = Modifier.fillMaxSize()
                 )
             }
