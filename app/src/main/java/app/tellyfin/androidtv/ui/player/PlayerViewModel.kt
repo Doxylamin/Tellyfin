@@ -66,6 +66,11 @@ const val NAV_LIVE     = 1
 const val NAV_SEARCH   = 2
 const val NAV_SETTINGS = 3
 
+// Settings screen focus targets (highlightedMenuIndex while Overlay.Settings is open)
+const val SETTINGS_FOCUS_BANDWIDTH = 0  // Streaming card, top-left
+const val SETTINGS_FOCUS_UPDATE    = 1  // App card, top-right
+const val SETTINGS_FOCUS_LOGOUT    = 2  // Account card, bottom
+
 data class PlayerUiState(
     val isLoadingChannels: Boolean = true,
     val loadingStatus: String = "Connecting to server…",
@@ -700,7 +705,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleSettingsKeys(keyCode: Int, state: PlayerUiState): Boolean {
-        // Rows: 0 = logout, 1 = update, 2 = bandwidth
         if (state.bitratePickerOpen) {
             return when (keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP -> {
@@ -723,32 +727,39 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 else -> false
             }
         }
+        // Card grid: SETTINGS_FOCUS_BANDWIDTH (top-left), SETTINGS_FOCUS_UPDATE (top-right),
+        // SETTINGS_FOCUS_LOGOUT (bottom row)
+        fun focus(index: Int) { _uiState.value = state.copy(highlightedMenuIndex = index) }
         return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (state.highlightedMenuIndex == SETTINGS_FOCUS_UPDATE) focus(SETTINGS_FOCUS_BANDWIDTH)
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (state.highlightedMenuIndex == SETTINGS_FOCUS_BANDWIDTH) focus(SETTINGS_FOCUS_UPDATE)
+                true
+            }
             KeyEvent.KEYCODE_DPAD_UP -> {
-                _uiState.value = state.copy(
-                    highlightedMenuIndex = (state.highlightedMenuIndex - 1 + 3) % 3
-                )
+                if (state.highlightedMenuIndex == SETTINGS_FOCUS_LOGOUT) focus(SETTINGS_FOCUS_BANDWIDTH)
                 true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                _uiState.value = state.copy(
-                    highlightedMenuIndex = (state.highlightedMenuIndex + 1) % 3
-                )
+                if (state.highlightedMenuIndex != SETTINGS_FOCUS_LOGOUT) focus(SETTINGS_FOCUS_LOGOUT)
                 true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 when (state.highlightedMenuIndex) {
-                    0 -> logOut()
-                    1 -> when (state.updateStatus) {
-                        is UpdateStatus.Available -> downloadUpdate((state.updateStatus as UpdateStatus.Available).version)
-                        UpdateStatus.ReadyToInstall -> triggerInstall()
-                        else -> Unit
-                    }
-                    2 -> {
+                    SETTINGS_FOCUS_BANDWIDTH -> {
                         val currentIdx = BITRATE_OPTIONS.indexOfFirst { it.first == state.maxBitrate }
                             .takeIf { it >= 0 } ?: 0
                         _uiState.value = state.copy(bitratePickerOpen = true, bitratePickerIndex = currentIdx)
                     }
+                    SETTINGS_FOCUS_UPDATE -> when (state.updateStatus) {
+                        is UpdateStatus.Available -> downloadUpdate((state.updateStatus as UpdateStatus.Available).version)
+                        UpdateStatus.ReadyToInstall -> triggerInstall()
+                        else -> Unit
+                    }
+                    SETTINGS_FOCUS_LOGOUT -> logOut()
                 }
                 true
             }
