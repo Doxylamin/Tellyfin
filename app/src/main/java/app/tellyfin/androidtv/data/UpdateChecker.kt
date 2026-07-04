@@ -12,6 +12,17 @@ class UpdateChecker(private val context: Context) {
     companion object {
         private const val VERSION_URL = "https://tellyfin.app/.version.txt"
         private const val DOWNLOAD_URL = "https://tellyfin.app/download"
+
+        fun isNewer(remote: String, current: String): Boolean {
+            fun parts(v: String) = v.trimStart('v').split(".").map { it.toIntOrNull() ?: 0 }
+            val r = parts(remote)
+            val c = parts(current)
+            for (i in 0 until maxOf(r.size, c.size)) {
+                val diff = (r.getOrElse(i) { 0 }) - (c.getOrElse(i) { 0 })
+                if (diff != 0) return diff > 0
+            }
+            return false
+        }
     }
 
     suspend fun fetchLatestVersion(): String? = withContext(Dispatchers.IO) {
@@ -21,17 +32,6 @@ class UpdateChecker(private val context: Context) {
             conn.readTimeout = 8_000
             conn.inputStream.bufferedReader().readLine()?.trim()
         } catch (_: Exception) { null }
-    }
-
-    fun isNewer(remote: String, current: String): Boolean {
-        fun parts(v: String) = v.trimStart('v').split(".").map { it.toIntOrNull() ?: 0 }
-        val r = parts(remote)
-        val c = parts(current)
-        for (i in 0 until maxOf(r.size, c.size)) {
-            val diff = (r.getOrElse(i) { 0 }) - (c.getOrElse(i) { 0 })
-            if (diff != 0) return diff > 0
-        }
-        return false
     }
 
     suspend fun downloadApk(
