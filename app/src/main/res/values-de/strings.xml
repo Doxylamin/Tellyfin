@@ -87,7 +87,9 @@
     <string name="settings_update_downloading">Wird heruntergeladen… %d%%</string>
     <string name="settings_update_ready">OK zum Installieren</string>
     <string name="settings_update_error">Update-Prüfung fehlgeschlagen</string>
-    <string name="settings_hint">↑↓ Navigation  ·  ◀▶ Bandbreite ändern  ·  ZURÜCK zum Schließen</string>
+    <string name="settings_update_label">Update</string>
+    <string name="settings_bandwidth_hint">Begrenzt die Streamqualität — hilfreich bei langsamer Verbindung. Auto überlässt die Wahl dem Server.</string>
+    <string name="settings_hint">↑↓ ← → Navigation  ·  OK Auswählen  ·  ZURÜCK Schließen</string>
 
     <!-- Channel banner -->
     <string name="banner_preview_hint">OK Ansehen  ·  ← Abbrechen</string>
