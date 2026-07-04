@@ -86,7 +86,15 @@ fun HomeScreen(
     epgFocusedBlockIndex: Int,
     modifier: Modifier = Modifier
 ) {
-    val now = remember { Instant.now() }
+    // Ticking "now" so progress bars, LIVE states and the now-line stay fresh
+    // while the home screen sits open.
+    var now by remember { mutableStateOf(Instant.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000L)
+            now = Instant.now()
+        }
+    }
 
     Box(
         modifier = modifier

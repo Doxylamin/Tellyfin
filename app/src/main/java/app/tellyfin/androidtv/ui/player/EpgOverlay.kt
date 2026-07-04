@@ -29,7 +29,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,7 +68,14 @@ fun EpgOverlay(
     visible: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val now = remember { Instant.now() }
+    // Refresh "now" each time the overlay opens and tick while it stays visible
+    var now by remember { mutableStateOf(Instant.now()) }
+    LaunchedEffect(visible) {
+        while (visible) {
+            now = Instant.now()
+            kotlinx.coroutines.delay(30_000L)
+        }
+    }
     val zoneId = remember { ZoneId.systemDefault() }
     val timeFmt = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(zoneId) }
 

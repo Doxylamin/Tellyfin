@@ -91,4 +91,10 @@
 
     <!-- Channel banner -->
     <string name="banner_preview_hint">OK Watch  ·  ← Cancel</string>
+
+    <!-- Startup update prompt -->
+    <string name="update_prompt_title">Update available</string>
+    <string name="update_prompt_message">Tellyfin %1$s is ready to install — you have %2$s.</string>
+    <string name="update_install">Install now</string>
+    <string name="update_later">Later</string>
 </resources>

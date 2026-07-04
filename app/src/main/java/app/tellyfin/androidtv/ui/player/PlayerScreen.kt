@@ -204,6 +204,15 @@ fun PlayerScreen(
             visible = state.overlay is Overlay.Epg
         )
 
+        // Startup update prompt — sits above everything
+        UpdatePromptOverlay(
+            visible = state.overlay is Overlay.UpdatePrompt,
+            version = (state.overlay as? Overlay.UpdatePrompt)?.version ?: "",
+            currentVersion = BuildConfig.VERSION_NAME,
+            updateStatus = state.updateStatus,
+            buttonIndex = state.updatePromptButtonIndex
+        )
+
         // Search overlay is accessible from any state
         SearchOverlay(
             query = state.searchQuery,

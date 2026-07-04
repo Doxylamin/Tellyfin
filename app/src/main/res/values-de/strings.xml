@@ -91,4 +91,10 @@
 
     <!-- Channel banner -->
     <string name="banner_preview_hint">OK Ansehen  ·  ← Abbrechen</string>
+
+    <!-- Startup update prompt -->
+    <string name="update_prompt_title">Update verfügbar</string>
+    <string name="update_prompt_message">Tellyfin %1$s steht zur Installation bereit — installiert ist %2$s.</string>
+    <string name="update_install">Jetzt installieren</string>
+    <string name="update_later">Später</string>
 </resources>

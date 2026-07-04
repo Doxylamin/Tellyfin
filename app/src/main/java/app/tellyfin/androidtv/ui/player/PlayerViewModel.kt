@@ -4,12 +4,19 @@ import android.app.Application
 import android.view.KeyEvent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.tellyfin.androidtv.BuildConfig
 import app.tellyfin.androidtv.data.UpdateChecker
 import app.tellyfin.androidtv.data.api.JellyfinRepository
+import app.tellyfin.androidtv.data.api.ServerAuth
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
 import app.tellyfin.androidtv.data.prefs.PreferencesRepository
@@ -35,6 +42,8 @@ sealed class Overlay {
     object Settings : Overlay()
     object Search : Overlay()
     data class ZapInput(val digits: String) : Overlay()
+    /** Shown on start when a newer app version is available */
+    data class UpdatePrompt(val version: String) : Overlay()
     /** MENU key on EPG row — sidebar with Play / Favorite / Details */
     data class ChannelContext(val channelIndex: Int) : Overlay()
     /** "Details" in ChannelContext — single-channel programme list */
@@ -85,7 +94,9 @@ data class PlayerUiState(
     val updateStatus: UpdateStatus = UpdateStatus.Idle,
     val pendingInstallFile: File? = null,
     val bitratePickerOpen: Boolean = false,
-    val bitratePickerIndex: Int = 0
+    val bitratePickerIndex: Int = 0,
+    /** 0 = Install now, 1 = Later */
+    val updatePromptButtonIndex: Int = 0
 ) {
     val currentChannel: Channel? get() = channels.getOrNull(currentIndex)
     val highlightedChannel: Channel? get() = channels.getOrNull(highlightedIndex)
@@ -128,14 +139,48 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val jellyfinRepo = JellyfinRepository(application)
     private val updateChecker = UpdateChecker(application)
 
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(application).build().also { player ->
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                _uiState.value = _uiState.value.copy(isBuffering = state == Player.STATE_BUFFERING)
-            }
-        })
-        player.playWhenReady = true
-    }
+    // Streams authenticate via Authorization header (set once prefs are read in init),
+    // keeping the access token out of URLs on the publicly exposed server.
+    private val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        .setUserAgent("Tellyfin")
+
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(application)
+        .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))
+        // Live TV: keep start-up buffering short so channel zapping feels instant
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    /* minBufferMs = */ 15_000,
+                    /* maxBufferMs = */ 50_000,
+                    /* bufferForPlaybackMs = */ 1_500,
+                    /* bufferForPlaybackAfterRebufferMs = */ 3_000
+                )
+                .build()
+        )
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .build(),
+            /* handleAudioFocus = */ true
+        )
+        .build()
+        .also { player ->
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) streamRetryCount = 0
+                    _uiState.value = _uiState.value.copy(
+                        isBuffering = state == Player.STATE_BUFFERING,
+                        error = if (state == Player.STATE_READY) null else _uiState.value.error
+                    )
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    onStreamError(error)
+                }
+            })
+            player.playWhenReady = true
+        }
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
@@ -143,6 +188,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var bannerDismissJob: Job? = null
     private var zapDismissJob: Job? = null
     private var progressReportJob: Job? = null
+    private var streamRetryJob: Job? = null
+    private var streamRetryCount = 0
     private var userId: String = ""
 
     init {
@@ -158,6 +205,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
             val username = prefsRepo.username.first()
             jellyfinRepo.configure(url, token, userId)
+            ServerAuth.authHeader?.let { header ->
+                httpDataSourceFactory.setDefaultRequestProperties(mapOf("Authorization" to header))
+            }
             _uiState.value = _uiState.value.copy(
                 maxBitrate = maxBitrate,
                 favoriteChannelIds = favIds,
@@ -165,6 +215,24 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 loadingStatus = "Loading channels…"
             )
             loadChannels(startIndex = lastIndex)
+        }
+        promptForUpdateIfAvailable()
+    }
+
+    /** On start: once the splash is gone, offer to install a newer version. */
+    private fun promptForUpdateIfAvailable() {
+        viewModelScope.launch {
+            val remote = updateChecker.fetchLatestVersion() ?: return@launch
+            if (!UpdateChecker.isNewer(remote, BuildConfig.VERSION_NAME)) return@launch
+            uiState.first { !it.isLoadingChannels }
+            val state = _uiState.value
+            // Don't interrupt if the user already navigated somewhere
+            if (state.channels.isEmpty() || state.overlay !is Overlay.None || state.isPlaying) return@launch
+            _uiState.value = state.copy(
+                overlay = Overlay.UpdatePrompt(remote),
+                updateStatus = UpdateStatus.Available(remote),
+                updatePromptButtonIndex = 0
+            )
         }
     }
 
@@ -241,6 +309,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             state.overlay is Overlay.Settings -> handleSettingsKeys(keyCode, state)
             state.overlay is Overlay.ChannelContext -> handleChannelContextKeys(keyCode, state)
             state.overlay is Overlay.ChannelDetails -> handleChannelDetailsKeys(keyCode, state)
+            state.overlay is Overlay.UpdatePrompt -> handleUpdatePromptKeys(keyCode, state)
             !state.isPlaying -> handleHomeKeys(keyCode, state)
             else -> handlePlayerKeys(keyCode, state)
         }
@@ -270,13 +339,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             state.overlay !is Overlay.None -> { dismissOverlay(); true }
             state.isPlaying -> {
                 stopProgressReporting(state.currentChannel?.id)
+                streamRetryJob?.cancel()
                 exoPlayer.stop()
                 _uiState.value = state.copy(
                     isPlaying = false,
                     overlay = Overlay.None,
+                    error = null,
                     highlightedIndex = state.currentIndex,
                     homeFocusSection = HOME_SECTION_EPG,
-                    nowPlayingCardIndex = state.currentIndex.coerceIn(0, (state.channels.size - 1).coerceAtLeast(0))
+                    nowPlayingCardIndex = state.currentIndex.coerceIn(0, (state.channels.size - 1).coerceAtLeast(0)),
+                    epgFocusedBlockIndex = state.currentChannel
+                        ?.let { currentProgramIndex(it.id, state.epgData) } ?: 0
                 )
                 true
             }
@@ -390,7 +463,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    _uiState.value = state.copy(epgFocusedBlockIndex = state.epgFocusedBlockIndex + 1)
+                    val programs = state.highlightedChannel
+                        ?.let { state.epgData[it.id.toString()] }.orEmpty()
+                    val maxIdx = (programs.size - 1).coerceAtLeast(0)
+                    _uiState.value = state.copy(
+                        epgFocusedBlockIndex = (state.epgFocusedBlockIndex + 1).coerceAtMost(maxIdx)
+                    )
                     true
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
@@ -491,6 +569,28 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun handleUpdatePromptKeys(keyCode: Int, state: PlayerUiState): Boolean {
+        val version = (state.overlay as Overlay.UpdatePrompt).version
+        val isDownloading = state.updateStatus is UpdateStatus.Downloading
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (!isDownloading) {
+                    _uiState.value = state.copy(updatePromptButtonIndex = 1 - state.updatePromptButtonIndex)
+                }
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                when {
+                    isDownloading -> Unit
+                    state.updatePromptButtonIndex == 0 -> downloadUpdate(version)
+                    else -> dismissOverlay()
+                }
+                true
+            }
+            else -> false
+        }
+    }
+
     private fun handlePlayerKeys(keyCode: Int, state: PlayerUiState): Boolean {
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> { previewChannelUp(); true }
@@ -500,8 +600,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 else { openNowPlaying(); true }
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> { openChannelList(); true }
-            KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_MENU -> { openQuickMenu(); true }
+            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_GUIDE -> { openEpg(); true }
+            KeyEvent.KEYCODE_MENU -> { openQuickMenu(); true }
             KeyEvent.KEYCODE_INFO -> { showChannelBanner(); true }
+            KeyEvent.KEYCODE_CHANNEL_UP -> { channelUp(); true }
+            KeyEvent.KEYCODE_CHANNEL_DOWN -> { channelDown(); true }
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> { onZapDigit(keyCode - KeyEvent.KEYCODE_0); true }
             else -> false
         }
@@ -673,7 +776,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             val remote = updateChecker.fetchLatestVersion()
             _uiState.value = if (remote == null) {
                 _uiState.value.copy(updateStatus = UpdateStatus.Error("Could not reach update server"))
-            } else if (updateChecker.isNewer(remote, BuildConfig.VERSION_NAME)) {
+            } else if (UpdateChecker.isNewer(remote, BuildConfig.VERSION_NAME)) {
                 _uiState.value.copy(updateStatus = UpdateStatus.Available(remote))
             } else {
                 _uiState.value.copy(updateStatus = UpdateStatus.UpToDate)
@@ -700,12 +803,18 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun clearPendingInstall() {
-        _uiState.value = _uiState.value.copy(pendingInstallFile = null)
+        val state = _uiState.value
+        _uiState.value = state.copy(
+            pendingInstallFile = null,
+            // The system installer took over — drop the startup prompt behind it
+            overlay = if (state.overlay is Overlay.UpdatePrompt) Overlay.None else state.overlay
+        )
     }
 
     fun logOut() {
         viewModelScope.launch {
             prefsRepo.clearSession()
+            ServerAuth.clear()
             _uiState.value = _uiState.value.copy(logoutRequested = true)
         }
     }
@@ -760,31 +869,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         searchJob = viewModelScope.launch {
-            delay(300)
+            delay(200)
+            val state = _uiState.value
             val results = withContext(Dispatchers.Default) {
-                computeSearchResults(query, _uiState.value)
+                ChannelSearch.search(query, state.channels, state.epgData)
             }
             _uiState.value = _uiState.value.copy(searchResults = results)
         }
-    }
-
-    private fun computeSearchResults(query: String, state: PlayerUiState): List<SearchResult> {
-        if (query.isBlank()) return emptyList()
-        val q = query.lowercase().trim()
-        val channelMatches: List<SearchResult> = state.channels
-            .filter { ch -> ch.name.lowercase().contains(q) || ch.number.toString().contains(q) }
-            .map { SearchResult.ChannelMatch(it) }
-
-        val programMatches: List<SearchResult.ProgramMatch> = state.epgData.entries.flatMap { (chId, progs) ->
-            val ch = state.channels.firstOrNull { it.id.toString() == chId }
-                ?: return@flatMap emptyList<SearchResult.ProgramMatch>()
-            progs.filter { p -> p.title.lowercase().contains(q) }
-                .sortedBy { it.startTime }
-                .take(3)
-                .map { SearchResult.ProgramMatch(it, ch) }
-        }.sortedBy { it.program.startTime }.take(15)
-
-        return (channelMatches + programMatches).take(30)
     }
 
     fun openSearch() {
@@ -823,9 +914,30 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         playChannel(index)
     }
 
+    /** Transient live-stream hiccups are common; retry quietly before surfacing an error. */
+    private fun onStreamError(error: PlaybackException) {
+        if (!_uiState.value.isPlaying) return
+        if (streamRetryCount < 2) {
+            streamRetryCount++
+            _uiState.value = _uiState.value.copy(isBuffering = true, error = null)
+            streamRetryJob?.cancel()
+            streamRetryJob = viewModelScope.launch {
+                delay(2_000L * streamRetryCount)
+                exoPlayer.prepare()
+            }
+        } else {
+            _uiState.value = _uiState.value.copy(
+                isBuffering = false,
+                error = "Stream error: ${error.errorCodeName}"
+            )
+        }
+    }
+
     private fun playChannel(index: Int) {
         val channel = _uiState.value.channels.getOrNull(index) ?: return
         stopProgressReporting(channel.id)
+        streamRetryJob?.cancel()
+        streamRetryCount = 0
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isBuffering = true, error = null)
             try {
@@ -878,6 +990,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val state = _uiState.value
         if (state.highlightedIndex != state.currentIndex) switchToChannel(state.highlightedIndex)
         else _uiState.value = state.copy(overlay = Overlay.None)
+    }
+
+    private fun openEpg() {
+        _uiState.value = _uiState.value.copy(
+            overlay = Overlay.Epg,
+            highlightedIndex = _uiState.value.currentIndex
+        )
     }
 
     private fun openChannelList() {

@@ -43,6 +43,7 @@ class JellyfinRepository(private val context: Context) {
         this.accessToken = accessToken
         this.userId = userId
         api = jellyfin.createApi(baseUrl = this.serverUrl, accessToken = accessToken)
+        ServerAuth.configure(this.serverUrl, accessToken)
     }
 
     val baseUrl: String get() = serverUrl
@@ -85,8 +86,9 @@ class JellyfinRepository(private val context: Context) {
                 id = item.id ?: UUID.randomUUID(),
                 name = item.name ?: "Channel ${index + 1}",
                 number = item.indexNumber ?: (index + 1),
+                // No api_key in the URL — Coil sends the Authorization header (see TellyfinApp)
                 logoUrl = item.id?.let { id ->
-                    "$serverUrl/Items/$id/Images/Primary?api_key=$accessToken"
+                    "$serverUrl/Items/$id/Images/Primary"
                 },
                 currentProgram = currentProgram
             )
@@ -167,11 +169,12 @@ class JellyfinRepository(private val context: Context) {
         }
     }
 
+    // Auth is sent via the Authorization header on the player's HTTP data source,
+    // never as an api_key query parameter (the server is publicly exposed).
     suspend fun getStreamUrl(channelId: UUID, userId: String, maxBitrate: Int? = null): String {
         return buildString {
             append("$serverUrl/Videos/$channelId/stream")
-            append("?api_key=$accessToken")
-            append("&mediaSourceId=$channelId")
+            append("?mediaSourceId=$channelId")
             if (maxBitrate != null) {
                 append("&MaxStreamingBitrate=$maxBitrate")
                 append("&static=false")
