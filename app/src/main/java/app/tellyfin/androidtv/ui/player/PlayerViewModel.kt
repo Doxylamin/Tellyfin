@@ -190,6 +190,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    private val lifecycle = PlaybackLifecycle()
+
     private var bannerDismissJob: Job? = null
     private var zapDismissJob: Job? = null
     private var progressReportJob: Job? = null
@@ -928,6 +930,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     /** Transient live-stream hiccups are common; retry quietly before surfacing an error. */
     private fun onStreamError(error: PlaybackException) {
         if (!_uiState.value.isPlaying) return
+        // Losing the decoder on the way to the background is not a stream fault, and
+        // retrying it would race the teardown; onEnterForeground re-prepares instead.
+        if (!lifecycle.isForeground) return
         if (streamRetryCount < 2) {
             streamRetryCount++
             _uiState.value = _uiState.value.copy(isBuffering = true, error = null)
@@ -1112,6 +1117,28 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val index = _uiState.value.channels.indexOfFirst { it.number == channelNumber }
         if (index >= 0) selectChannel(index)
         else _uiState.value = _uiState.value.copy(overlay = Overlay.None)
+    }
+
+    // ── App lifecycle ───────────────────────────────────────────────────────
+
+    /**
+     * Called from the activity's onStop. Leaves [PlayerUiState.isPlaying] set so the
+     * player screen is still showing on return, and lets [onEnterForeground] re-prepare.
+     */
+    fun onEnterBackground() {
+        if (!lifecycle.onBackground(_uiState.value.isPlaying)) return
+        streamRetryJob?.cancel()
+        streamRetryCount = 0
+        stopProgressReporting(_uiState.value.currentChannel?.id)
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
+        _uiState.value = _uiState.value.copy(isBuffering = false, error = null)
+    }
+
+    /** Called from the activity's onStart; re-prepares the channel from the live edge. */
+    fun onEnterForeground() {
+        if (!lifecycle.onForeground()) return
+        playChannel(_uiState.value.currentIndex)
     }
 
     override fun onCleared() {

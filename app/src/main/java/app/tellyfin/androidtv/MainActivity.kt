@@ -59,6 +59,18 @@ class MainActivity : ComponentActivity() {
         startActivity(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        playerViewModel.onEnterForeground()
+    }
+
+    // onStop rather than onPause: transient overlays (dialogs, the recents switcher)
+    // pause the activity without hiding it, and should not interrupt playback.
+    override fun onStop() {
+        super.onStop()
+        playerViewModel.onEnterBackground()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         longPressRunnable?.let { longPressHandler.removeCallbacks(it) }
