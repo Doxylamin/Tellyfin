@@ -3,9 +3,10 @@ package app.tellyfin.androidtv.data.api
 import android.content.Context
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.createJellyfin
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
@@ -32,6 +33,10 @@ class JellyfinRepository(private val context: Context) {
         clientInfo = ClientInfo(name = "JellyTV", version = "1.0.0")
         context = this@JellyfinRepository.context
     }
+
+    // Resolved once: systemDefault() is a non-trivial lookup and the mappers below
+    // call it once per programme.
+    private val zone: ZoneId = ZoneId.systemDefault()
 
     private var api: ApiClient? = null
     private var serverUrl: String = ""
@@ -60,7 +65,7 @@ class JellyfinRepository(private val context: Context) {
         return Triple(url, token, uid)
     }
 
-    suspend fun getChannels(): List<Channel> {
+    suspend fun getChannels(): List<Channel> = withContext(Dispatchers.IO) {
         val client = api ?: error("Not configured")
         val result = client.liveTvApi.getLiveTvChannels(
             type = org.jellyfin.sdk.model.api.ChannelType.TV,
@@ -69,15 +74,15 @@ class JellyfinRepository(private val context: Context) {
             sortBy = listOf(ItemSortBy.SORT_NAME),
             sortOrder = SortOrder.ASCENDING
         )
-        return result.content.items.orEmpty().mapIndexed { index, item ->
+        result.content.items.orEmpty().mapIndexed { index, item ->
             val currentProgram = item.currentProgram?.let { prog ->
                 val channelId = item.id ?: return@let null
                 Program(
                     id = prog.id ?: UUID.randomUUID(),
                     channelId = channelId,
                     title = prog.name ?: "Unknown",
-                    startTime = prog.startDate?.atZone(ZoneId.systemDefault())?.toInstant() ?: Instant.now(),
-                    endTime = prog.endDate?.atZone(ZoneId.systemDefault())?.toInstant() ?: Instant.now(),
+                    startTime = prog.startDate?.atZone(zone)?.toInstant() ?: Instant.now(),
+                    endTime = prog.endDate?.atZone(zone)?.toInstant() ?: Instant.now(),
                     description = prog.overview,
                     genre = prog.genres?.firstOrNull()
                 )
@@ -95,54 +100,59 @@ class JellyfinRepository(private val context: Context) {
         }
     }
 
-    suspend fun getEpgPrograms(channelIds: List<UUID>, hoursAhead: Long = 8): Map<UUID, List<Program>> {
-        val client = api ?: return emptyMap()
+    /** Keyed by channel id as a String, matching PlayerUiState.epgData. */
+    suspend fun getEpgPrograms(
+        channelIds: List<UUID>,
+        hoursAhead: Long = 8
+    ): Map<String, List<Program>> = withContext(Dispatchers.IO) {
+        val client = api ?: return@withContext emptyMap()
         val now = LocalDateTime.now()
         val userUuid = userId.takeIf { it.isNotBlank() }?.let { UUID.fromString(it) }
 
         // Batch into groups of 50 to stay well under HTTP GET URL length limits.
         // Each UUID is 36 chars; 50 × ~37 ≈ 1,850 chars — safe for all servers.
-        // Run batches in parallel so large channel lists don't block the splash.
-        return coroutineScope {
-            channelIds.chunked(50).map { batch ->
-                async {
-                    try {
-                        val result = client.liveTvApi.getLiveTvPrograms(
-                            channelIds = batch,
-                            userId = userUuid,
-                            minEndDate = now,
-                            maxStartDate = now.plusHours(hoursAhead),
-                            enableImages = false,
-                            limit = batch.size * 20
+        // async inherits this IO context, so batches genuinely parse in parallel
+        // rather than queueing behind each other on whichever thread called us.
+        channelIds.chunked(50).map { batch ->
+            async {
+                try {
+                    val result = client.liveTvApi.getLiveTvPrograms(
+                        channelIds = batch,
+                        userId = userUuid,
+                        minEndDate = now,
+                        maxStartDate = now.plusHours(hoursAhead),
+                        enableImages = false,
+                        limit = batch.size * 20
+                    )
+                    result.content.items.orEmpty().mapNotNull { item ->
+                        val channelId = item.channelId ?: return@mapNotNull null
+                        Program(
+                            id = item.id ?: UUID.randomUUID(),
+                            channelId = channelId,
+                            title = item.name ?: "Unknown",
+                            startTime = item.startDate?.atZone(zone)?.toInstant() ?: Instant.now(),
+                            endTime = item.endDate?.atZone(zone)?.toInstant() ?: Instant.now(),
+                            description = item.overview,
+                            genre = item.genres?.firstOrNull()
                         )
-                        result.content.items.orEmpty().mapNotNull { item ->
-                            val channelId = item.channelId ?: return@mapNotNull null
-                            Program(
-                                id = item.id ?: UUID.randomUUID(),
-                                channelId = channelId,
-                                title = item.name ?: "Unknown",
-                                startTime = item.startDate?.atZone(ZoneId.systemDefault())?.toInstant() ?: Instant.now(),
-                                endTime = item.endDate?.atZone(ZoneId.systemDefault())?.toInstant() ?: Instant.now(),
-                                description = item.overview,
-                                genre = item.genres?.firstOrNull()
-                            )
-                        }
-                    } catch (_: Exception) {
-                        emptyList()
                     }
+                } catch (_: Exception) {
+                    emptyList()
                 }
             }
-                .awaitAll()
-                .flatten()
-                .distinctBy { it.id }
-                .groupBy { it.channelId }
         }
+            .awaitAll()
+            .flatten()
+            .distinctBy { it.id }
+            .groupBy { it.channelId }
+            // Done here rather than at the call site so the rebuild stays off the main thread.
+            .mapKeys { it.key.toString() }
     }
 
-    suspend fun getChannelPrograms(channelId: UUID): List<Program> {
-        val client = api ?: return emptyList()
+    suspend fun getChannelPrograms(channelId: UUID): List<Program> = withContext(Dispatchers.IO) {
+        val client = api ?: return@withContext emptyList()
         val now = LocalDateTime.now()
-        return try {
+        try {
             val userUuid = userId.takeIf { it.isNotBlank() }?.let { UUID.fromString(it) }
             val result = client.liveTvApi.getLiveTvPrograms(
                 channelIds = listOf(channelId),
@@ -157,8 +167,8 @@ class JellyfinRepository(private val context: Context) {
                         id = item.id ?: UUID.randomUUID(),
                         channelId = item.channelId ?: channelId,
                         title = item.name ?: "Unknown",
-                        startTime = item.startDate?.atZone(ZoneId.systemDefault())?.toInstant() ?: Instant.now(),
-                        endTime = item.endDate?.atZone(ZoneId.systemDefault())?.toInstant() ?: Instant.now(),
+                        startTime = item.startDate?.atZone(zone)?.toInstant() ?: Instant.now(),
+                        endTime = item.endDate?.atZone(zone)?.toInstant() ?: Instant.now(),
                         description = item.overview,
                         genre = item.genres?.firstOrNull()
                     )

@@ -271,7 +271,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 val ids = _uiState.value.channels.map { it.id }
                 val programs = jellyfinRepo.getEpgPrograms(ids)
                 _uiState.value = _uiState.value.copy(
-                    epgData = programs.mapKeys { it.key.toString() },
+                    epgData = programs,
                     isLoadingChannels = false
                 )
             } catch (_: Exception) {
