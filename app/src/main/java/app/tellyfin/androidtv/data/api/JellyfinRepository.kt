@@ -1,6 +1,7 @@
 package app.tellyfin.androidtv.data.api
 
 import android.content.Context
+import app.tellyfin.androidtv.BuildConfig
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
 import kotlinx.coroutines.Dispatchers
@@ -8,6 +9,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.createJellyfin
+import org.jellyfin.sdk.android.androidDevice
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.api.client.extensions.playStateApi
@@ -26,11 +28,21 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
+import kotlin.math.min
 
 class JellyfinRepository(private val context: Context) {
 
+    // One identity for the whole app. The SDK signs its own calls with these, and the raw
+    // image/stream requests made outside it have to present the same pair, or the server books
+    // playback reporting and the playback itself as two unrelated sessions. The device id comes
+    // from the SDK's Android helper (ANDROID_ID), so it is per-install rather than shared by
+    // every copy of the app.
+    private val appClientInfo = ClientInfo(name = "Tellyfin", version = BuildConfig.VERSION_NAME)
+    private val appDeviceInfo = androidDevice(context)
+
     private val jellyfin = createJellyfin {
-        clientInfo = ClientInfo(name = "JellyTV", version = "1.0.0")
+        clientInfo = appClientInfo
+        deviceInfo = appDeviceInfo
         context = this@JellyfinRepository.context
     }
 
@@ -48,7 +60,7 @@ class JellyfinRepository(private val context: Context) {
         this.accessToken = accessToken
         this.userId = userId
         api = jellyfin.createApi(baseUrl = this.serverUrl, accessToken = accessToken)
-        ServerAuth.configure(this.serverUrl, accessToken)
+        ServerAuth.configure(this.serverUrl, accessToken, appClientInfo, appDeviceInfo)
     }
 
     val baseUrl: String get() = serverUrl
@@ -181,16 +193,8 @@ class JellyfinRepository(private val context: Context) {
 
     // Auth is sent via the Authorization header on the player's HTTP data source,
     // never as an api_key query parameter (the server is publicly exposed).
-    suspend fun getStreamUrl(channelId: UUID, userId: String, maxBitrate: Int? = null): String {
-        return buildString {
-            append("$serverUrl/Videos/$channelId/stream")
-            append("?mediaSourceId=$channelId")
-            if (maxBitrate != null) {
-                append("&MaxStreamingBitrate=$maxBitrate")
-                append("&static=false")
-            }
-        }
-    }
+    suspend fun getStreamUrl(channelId: UUID, userId: String, maxBitrate: Int? = null): String =
+        "$serverUrl/Videos/$channelId/stream" + buildStreamQuery(channelId, maxBitrate)
 
     suspend fun reportPlaybackStart(channelId: UUID) {
         val client = api ?: return
@@ -242,5 +246,30 @@ class JellyfinRepository(private val context: Context) {
                 )
             )
         } catch (_: Exception) {}
+    }
+}
+
+/**
+ * Share of the bitrate budget set aside for audio; video gets the rest. Capped at a quarter of
+ * the budget so the smallest option still leaves video the bulk of it.
+ */
+private const val AUDIO_BITRATE_BUDGET = 192_000
+
+/**
+ * Query string for the live stream URL.
+ *
+ * `/Videos/{id}/stream` has no `MaxStreamingBitrate` parameter — it reads `videoBitRate` and
+ * `audioBitRate`, so a cap has to be spelled out as an explicit split. Stream copy also has to
+ * be refused: left allowed, the server may hand back the source untouched at its original
+ * bitrate and the cap does nothing.
+ */
+internal fun buildStreamQuery(channelId: UUID, maxBitrate: Int?): String = buildString {
+    append("?mediaSourceId=$channelId")
+    if (maxBitrate != null) {
+        val audioBitrate = min(AUDIO_BITRATE_BUDGET, maxBitrate / 4)
+        append("&videoBitRate=${maxBitrate - audioBitrate}")
+        append("&audioBitRate=$audioBitrate")
+        append("&allowVideoStreamCopy=false")
+        append("&static=false")
     }
 }

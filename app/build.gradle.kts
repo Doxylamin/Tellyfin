@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -15,7 +14,7 @@ val keystorePath: String? = System.getenv("KEYSTORE_PATH")
 
 android {
     namespace = "app.tellyfin.androidtv"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.tellyfin.androidtv"

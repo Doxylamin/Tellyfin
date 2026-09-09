@@ -22,13 +22,14 @@ A native Android TV app for watching Live TV through your [Jellyfin](https://jel
 ## Requirements
 
 - Android TV device (Fire TV, Android TV box, Google TV, etc.) running Android 5.0+
-- A running [Jellyfin](https://jellyfin.org) instance with Live TV configured (DVB tuner, M3U IPTV plugin, etc.)
+- A running [Jellyfin](https://jellyfin.org) instance with Live TV configured (DVB tuner, M3U IPTV plugin, etc.) — 10.11 or 12.0
 
 ## Building
 
 1. Clone the repo
-2. Open in [Android Studio](https://developer.android.com/studio) (Ladybug or later)
-3. Let Gradle sync — requires Gradle 8.7 and Kotlin 2.2
+2. Open in [Android Studio](https://developer.android.com/studio) (a build that supports AGP 9.4)
+3. Let Gradle sync — requires Gradle 9.7, AGP 9.4 and `compileSdk` 37 (`platforms;android-37.0`).
+   Kotlin comes from AGP's built-in support, so there is no separate Kotlin plugin version to keep in step.
 4. Connect a device or emulator and press **Run**
 
 ```bash
