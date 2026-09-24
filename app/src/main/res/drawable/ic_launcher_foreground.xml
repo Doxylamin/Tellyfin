@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Adaptive icon foreground — 108×108dp canvas, 72×72dp safe zone centred.
-  Design: rounded TV bezel with a fin-shaped play arrow inside.
+  Mirrors tellyfin.app/assets/icon.svg: TV with rabbit-ear antenna and a
+  play triangle. The whole design is scaled to 0.85 around the canvas
+  centre so the antenna tips stay inside the safe zone under a circular
+  or squircle launcher mask instead of getting clipped.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -9,48 +12,53 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- TV body (rounded rectangle, centred in safe zone) -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.10"
-        android:pathData="
-          M28,32 Q24,32 24,36
-          L24,72 Q24,76 28,76
-          L80,76 Q84,76 84,72
-          L84,36 Q84,32 80,32 Z" />
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.85"
+        android:scaleY="0.85">
 
-    <!-- TV screen (slightly inset, filled with purple) -->
-    <path
-        android:fillColor="#7C4DFF"
-        android:fillAlpha="0.90"
-        android:pathData="
-          M31,36 Q29,36 29,38
-          L29,70 Q29,72 31,72
-          L77,72 Q79,72 79,70
-          L79,38 Q79,36 77,36 Z" />
+        <!-- TV bezel (rounded rectangle) -->
+        <path
+            android:fillColor="#7A4FE0"
+            android:pathData="
+              M26,25 L82,25 Q91,25 91,34
+              L91,69 Q91,78 82,78
+              L26,78 Q17,78 17,69
+              L17,34 Q17,25 26,25 Z" />
 
-    <!-- Play triangle — fin shape, slightly asymmetric like a fin -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="
-          M46,46 L46,62 L66,54 Z" />
+        <!-- Screen cutout, same colour as the background so it reads as hollow -->
+        <path
+            android:fillColor="#0D0D22"
+            android:pathData="
+              M28,31 L80,31 Q85,31 85,36
+              L85,67 Q85,72 80,72
+              L28,72 Q23,72 23,67
+              L23,36 Q23,31 28,31 Z" />
 
-    <!-- TV stand left leg -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.50"
-        android:pathData="M38,76 L35,82 L42,82 L44,76 Z" />
+        <!-- Play triangle -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.95"
+            android:pathData="M45,41.5 L45,61.5 L63,51.5 Z" />
 
-    <!-- TV stand right leg -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.50"
-        android:pathData="M70,76 L64,76 L66,82 L73,82 Z" />
+        <!-- Bottom bar -->
+        <path
+            android:fillColor="#7A4FE0"
+            android:fillAlpha="0.75"
+            android:pathData="
+              M38.5,84 L69.5,84 Q72,84 72,86.5
+              Q72,89 69.5,89
+              L38.5,89 Q36,89 36,86.5
+              Q36,84 38.5,84 Z" />
 
-    <!-- Stand base bar -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.30"
-        android:pathData="M33,82 L75,82 L75,84 L33,84 Z" />
+        <!-- Rabbit-ear antenna -->
+        <path
+            android:strokeColor="#7A4FE0"
+            android:strokeWidth="5"
+            android:strokeLineCap="round"
+            android:pathData="M40,25 L30,13 M68,25 L78,13" />
+
+    </group>
 
 </vector>
