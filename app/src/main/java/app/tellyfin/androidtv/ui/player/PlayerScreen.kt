@@ -69,7 +69,7 @@ fun PlayerScreen(
                     currentBitrate = state.maxBitrate,
                     highlightedIndex = state.highlightedMenuIndex,
                     updateStatus = state.updateStatus,
-                    appVersion = BuildConfig.VERSION_NAME,
+                    appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.FLAVOR})",
                     bitratePickerOpen = state.bitratePickerOpen,
                     bitratePickerIndex = state.bitratePickerIndex,
                     modifier = Modifier.fillMaxSize()
@@ -86,7 +86,8 @@ fun PlayerScreen(
                     homeNavTabIndex = state.homeNavTabIndex,
                     homeFocusSection = state.homeFocusSection,
                     nowPlayingCardIndex = state.nowPlayingCardIndex,
-                    epgFocusedBlockIndex = state.epgFocusedBlockIndex
+                    epgFocusedBlockIndex = state.epgFocusedBlockIndex,
+                    serverName = state.serverName
                 )
             }
 

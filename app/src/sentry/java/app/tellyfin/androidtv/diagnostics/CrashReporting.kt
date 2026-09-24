@@ -14,9 +14,10 @@ object CrashReporting {
             options.dsn = BuildConfig.SENTRY_DSN
             options.environment = if (BuildConfig.DEBUG) "debug" else "release"
             options.release = "tellyfin@${BuildConfig.VERSION_NAME}"
-            // Logs show up on the dashboard as they're sent, independent of any event/error —
-            // unlike breadcrumbs, which are only visible once attached to a captured event.
-            options.logs.isEnabled = true
+            // Logs stream to the dashboard continuously, independent of any captured event —
+            // fine for debug/beta diagnosis, too verbose (and too much real-user telemetry) to
+            // leave on for every routine action in a release build.
+            options.logs.isEnabled = BuildConfig.DEBUG
         }
     }
 
@@ -25,11 +26,16 @@ object CrashReporting {
         Sentry.logger().info(message)
     }
 
-    /** Returns a short ref the user can quote, or null if nothing was actually reported. */
+    /** Always active, in every build — a real exception is exactly what production reporting
+     *  is for. Returns a short ref the user can quote, or null if nothing was actually reported. */
     fun captureException(throwable: Throwable): String? =
         Sentry.captureException(throwable).toString().take(8)
 
+    /** A synthetic diagnostic message (not a real exception) — debug/beta only. Production
+     *  shouldn't get one of these from every user who happens to hit a slow network; it should
+     *  only ever report actual stack traces via captureException above. */
     fun captureMessage(message: String, level: ReportLevel) {
+        if (!BuildConfig.DEBUG) return
         Sentry.captureMessage(message, level.toSentryLevel())
         Sentry.logger().log(level.toSentryLogLevel(), message)
     }

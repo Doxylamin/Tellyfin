@@ -7,10 +7,12 @@ on:
       - "v*"
 
 # Required secrets (set in Settings → Secrets → Actions):
-#   KEYSTORE_BASE64   base64-encoded release keystore  (openssl base64 -in release.jks)
-#   KEYSTORE_PASSWORD keystore password
-#   KEY_ALIAS         signing key alias
-#   KEY_PASSWORD      signing key password
+#   KEYSTORE_BASE64    base64-encoded release keystore  (openssl base64 -in release.jks)
+#   KEYSTORE_PASSWORD  keystore password
+#   KEY_ALIAS          signing key alias
+#   KEY_PASSWORD       signing key password
+#   SENTRY_AUTH_TOKEN  optional — uploads proguard mappings for the sentry flavor only;
+#                      the noSentry flavor doesn't depend on Sentry at all, nothing to upload
 
 jobs:
   release:
@@ -51,44 +53,65 @@ jobs:
           VERSION_CODE="$(git rev-list --count HEAD)"
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
-          echo "APK_NAME=tellyfin-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
+          echo "SENTRY_APK_NAME=tellyfin-sentry-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
+          echo "NOSENTRY_APK_NAME=tellyfin-nosentry-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
+          # TODO(remove after 1.5.0 is the oldest version anyone runs): pre-1.5.0 installs use
+          # the old unsuffixed filename via download.php/.version.txt, which can't be updated
+          # retroactively. This bridge asset keeps their auto-update working for one more hop;
+          # 1.5.0+ clients use update.php and never look for this file.
+          echo "LEGACY_APK_NAME=tellyfin-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
 
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "${{ github.workspace }}/release.jks"
 
-      - name: Build signed release APK
+      - name: Build signed release APKs (both flavors)
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
-          ./gradlew assembleRelease \
+          ./gradlew assembleSentryRelease assembleNoSentryRelease \
             -PversionCode="${{ env.VERSION_CODE }}" \
             -PversionName="${{ env.VERSION_NAME }}"
 
-      - name: Rename APK
+      - name: Rename APKs
         run: |
-          mv app/build/outputs/apk/release/app-release.apk \
-             "app/build/outputs/apk/release/${{ env.APK_NAME }}"
+          mv app/build/outputs/apk/sentry/release/app-sentry-release.apk \
+             "app/build/outputs/apk/sentry/release/${{ env.SENTRY_APK_NAME }}"
+          mv app/build/outputs/apk/noSentry/release/app-noSentry-release.apk \
+             "app/build/outputs/apk/noSentry/release/${{ env.NOSENTRY_APK_NAME }}"
+          # TODO(remove after 1.5.0 is the oldest version anyone runs): see LEGACY_APK_NAME above.
+          cp "app/build/outputs/apk/sentry/release/${{ env.SENTRY_APK_NAME }}" \
+             "app/build/outputs/apk/sentry/release/${{ env.LEGACY_APK_NAME }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "Tellyfin ${{ env.VERSION_NAME }}"
           prerelease: ${{ contains(env.VERSION_NAME, '-') }}
-          files: app/build/outputs/apk/release/${{ env.APK_NAME }}
+          files: |
+            app/build/outputs/apk/sentry/release/${{ env.SENTRY_APK_NAME }}
+            app/build/outputs/apk/noSentry/release/${{ env.NOSENTRY_APK_NAME }}
+            app/build/outputs/apk/sentry/release/${{ env.LEGACY_APK_NAME }}
           body: |
+            ## Which build?
+
+            - **`${{ env.SENTRY_APK_NAME }}`** — reports crashes/errors to help fix bugs
+            - **`${{ env.NOSENTRY_APK_NAME }}`** — no crash reporting, no telemetry SDK at all
+
+            Both are the same app otherwise. Installing one replaces the other (same package).
+
             ## Install on Fire TV / Android TV
 
-            1. Download **`${{ env.APK_NAME }}`** below
+            1. Download the build you want, above
             2. Enable *Unknown sources* in your device settings
                *(Settings → My Fire TV → Developer options → Install unknown apps)*
             3. Sideload with adb:
                ```
-               adb install ${{ env.APK_NAME }}
+               adb install <the .apk you downloaded>
                ```
-               Or use [adbLink](https://www.jocala.com/) / [Downloader app](https://troypoint.com/downloader/) for wireless install.
 
             **versionCode:** ${{ env.VERSION_CODE }}

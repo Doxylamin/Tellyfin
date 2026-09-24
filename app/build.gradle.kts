@@ -42,7 +42,9 @@ android {
     }
 
     // Two variants for CI: `sentry` has the crash-reporting SDK as a dependency at all;
-    // `noSentry` doesn't — its APK contains zero Sentry code, not just a disabled flag.
+    // `noSentry` doesn't — its APK contains zero Sentry code, not just a disabled flag. Same
+    // applicationId on purpose — installing one is meant to replace the other, matching normal
+    // "pick a build and go" expectations, not run side by side as separate apps.
     flavorDimensions += "telemetry"
     productFlavors {
         create("sentry") {
@@ -50,7 +52,6 @@ android {
         }
         create("noSentry") {
             dimension = "telemetry"
-            applicationIdSuffix = ".nosentry"
         }
     }
 

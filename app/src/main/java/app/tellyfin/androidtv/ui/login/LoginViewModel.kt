@@ -178,11 +178,11 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 val result = jellyfinRepo.getQuickConnectState(serverUrl, secret)
                 if (result.authenticated) {
                     breadcrumb("pollQuickConnect() authenticated, calling authenticateWithQuickConnect()")
-                    val (url, token, userId) = jellyfinRepo.authenticateWithQuickConnect(serverUrl, secret)
+                    val auth = jellyfinRepo.authenticateWithQuickConnect(serverUrl, secret)
                     breadcrumb("pollQuickConnect() authenticateWithQuickConnect() done, saving session")
-                    prefsRepo.saveSession(url, token, userId)
+                    prefsRepo.saveSession(auth.serverUrl, auth.accessToken, auth.userId, auth.username)
                     breadcrumb("pollQuickConnect() saveSession() done, calling configure()")
-                    jellyfinRepo.configure(url, token, userId)
+                    jellyfinRepo.configure(auth.serverUrl, auth.accessToken, auth.userId)
                     breadcrumb("pollQuickConnect() configure() done, setting isLoggedIn=true")
                     _state.value = _state.value.copy(quickConnectCode = null, isLoggedIn = true)
                     return

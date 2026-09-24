@@ -34,3 +34,6 @@ captures/
 *.log
 resume.txt
 google-tv-live-tab-mit-joyn-zattoo-titel.jpg
+
+# Visual brainstorm companion scratch files
+.superpowers/

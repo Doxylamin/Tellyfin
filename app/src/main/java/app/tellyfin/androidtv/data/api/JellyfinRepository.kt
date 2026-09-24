@@ -37,6 +37,8 @@ import java.time.ZoneId
 import java.util.UUID
 import kotlin.math.min
 
+data class QuickConnectAuth(val serverUrl: String, val accessToken: String, val userId: String, val username: String)
+
 class JellyfinRepository(private val context: Context) {
 
     // One identity for the whole app. The SDK signs its own calls with these, and the raw
@@ -106,13 +108,16 @@ class JellyfinRepository(private val context: Context) {
         return tempApi.quickConnectApi.getQuickConnectState(secret).content
     }
 
-    suspend fun authenticateWithQuickConnect(serverUrl: String, secret: String): Triple<String, String, String> {
+    suspend fun authenticateWithQuickConnect(serverUrl: String, secret: String): QuickConnectAuth {
         val url = serverUrl.trimEnd('/')
         val tempApi = jellyfin.createApi(baseUrl = url)
         val result = tempApi.userApi.authenticateWithQuickConnect(QuickConnectDto(secret = secret))
         val token = result.content.accessToken ?: error("No access token returned")
         val uid = result.content.user?.id?.toString() ?: error("No user ID returned")
-        return Triple(url, token, uid)
+        // Unlike password login, there's no typed username to fall back on here — it has to
+        // come from the auth response, or the account ends up saved with an empty name.
+        val username = result.content.user?.name ?: ""
+        return QuickConnectAuth(url, token, uid, username)
     }
 
     suspend fun getChannels(): List<Channel> = withContext(Dispatchers.IO) {
@@ -169,7 +174,10 @@ class JellyfinRepository(private val context: Context) {
                     val result = client.liveTvApi.getLiveTvPrograms(
                         channelIds = batch,
                         userId = userUuid,
-                        minEndDate = now,
+                        // The EPG grid's window starts up to an hour in the past (so the "now"
+                        // line has room to sit mid-screen) — minEndDate = now would silently
+                        // exclude exactly that history from ever being fetched.
+                        minEndDate = now.minusHours(1),
                         maxStartDate = now.plusHours(hoursAhead),
                         enableImages = false,
                         limit = batch.size * 20
@@ -196,6 +204,10 @@ class JellyfinRepository(private val context: Context) {
             .distinctBy { it.id }
             .groupBy { it.channelId }
             // Done here rather than at the call site so the rebuild stays off the main thread.
+            // Sorted so consumers (the EPG grid) can rely on chronological order within a
+            // channel — the server doesn't guarantee it, and out-of-order entries render as
+            // overlapping blocks.
+            .mapValues { (_, programs) -> programs.sortedBy { it.startTime } }
             .mapKeys { it.key.toString() }
     }
 
@@ -207,7 +219,7 @@ class JellyfinRepository(private val context: Context) {
             val result = client.liveTvApi.getLiveTvPrograms(
                 channelIds = listOf(channelId),
                 userId = userUuid,
-                minEndDate = now,
+                minEndDate = now.minusHours(1),
                 maxStartDate = now.plusHours(8),
                 enableImages = false
             )

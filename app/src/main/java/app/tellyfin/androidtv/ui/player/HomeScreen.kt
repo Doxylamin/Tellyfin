@@ -72,7 +72,7 @@ private const val EPG_PX_PER_MIN = 4.0f
 private const val EPG_WINDOW_MINUTES = 300  // 5 hours
 private val EPG_ROW_HEIGHT = 52.dp
 private val EPG_RULER_HEIGHT = 32.dp
-private val EPG_CHANNEL_COL_WIDTH = 72.dp
+private val EPG_CHANNEL_COL_WIDTH = 76.dp
 
 @Composable
 fun HomeScreen(
@@ -84,6 +84,7 @@ fun HomeScreen(
     homeFocusSection: Int,
     nowPlayingCardIndex: Int,
     epgFocusedBlockIndex: Int,
+    serverName: String? = null,
     modifier: Modifier = Modifier
 ) {
     // Ticking "now" so progress bars, LIVE states and the now-line stay fresh
@@ -110,6 +111,7 @@ fun HomeScreen(
                 TopNavBar(
                     navTabIndex = homeNavTabIndex,
                     isFocused = homeFocusSection == HOME_SECTION_NAV,
+                    serverName = serverName,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -136,15 +138,6 @@ fun HomeScreen(
                 }
             }
         }
-
-        Text(
-            stringResource(R.string.home_hint),
-            fontSize = 10.sp,
-            color = AppColors.OnSurface.copy(alpha = 0.20f),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 10.dp)
-        )
     }
 }
 
@@ -154,6 +147,7 @@ fun HomeScreen(
 private fun TopNavBar(
     navTabIndex: Int,
     isFocused: Boolean,
+    serverName: String?,
     modifier: Modifier = Modifier
 ) {
     val tabs = listOf(
@@ -176,7 +170,12 @@ private fun TopNavBar(
                 .border(1.dp, AppColors.Purple.copy(alpha = 0.45f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text("T", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AppColors.Purple)
+            Text(
+                (serverName?.firstOrNull() ?: 'T').uppercaseChar().toString(),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppColors.Purple
+            )
         }
 
         Spacer(Modifier.width(20.dp))
@@ -470,8 +469,12 @@ private fun LiveEpgContent(
     val highlightedChannelId = channels.getOrNull(highlightedIndex)?.id
     val focusedChannel = channels.getOrNull(highlightedIndex)
     val focusedPrograms = focusedChannel?.let { epgData[it.id.toString()].orEmpty() } ?: emptyList()
-    val focusedProgram = focusedPrograms.getOrNull(epgFocusedBlockIndex)
+    // The D-pad selection is only trusted while it still points at something that hasn't
+    // ended — otherwise the hero would freeze on a stale block (0 min left, stuck progress)
+    // once time moves past it without the user having navigated away from it.
+    val focusedProgram = focusedPrograms.getOrNull(epgFocusedBlockIndex)?.takeIf { it.endTime > now }
         ?: focusedPrograms.firstOrNull { it.startTime <= now && it.endTime > now }
+        ?: focusedPrograms.firstOrNull { it.startTime > now }
         ?: focusedPrograms.firstOrNull()
 
     Column(modifier = modifier) {
@@ -481,7 +484,7 @@ private fun LiveEpgContent(
             now = now,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
+                .height(136.dp)
         )
         HomeEpgGrid(
             channels = sortedChannels,
@@ -502,43 +505,28 @@ private fun EpgHeroSection(
     now: Instant,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier) {
-        AsyncImage(
-            model = channel?.logoUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        0f to Color.Black.copy(alpha = 0.96f),
-                        0.6f to Color.Black.copy(alpha = 0.80f),
-                        1f to Color.Black.copy(alpha = 0.55f)
-                    )
-                )
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 48.dp, vertical = 16.dp)
-        ) {
+    Box(
+        modifier = modifier
+            // A soft brand-colored glow instead of the channel's own logo stretched to fill
+            // the whole banner — that crop produced an oversized, illegible smear of whatever
+            // shape the logo happened to be.
+            .background(Brush.radialGradient(listOf(AppColors.Purple.copy(alpha = 0.16f), AppColors.Background)))
+            .padding(horizontal = 48.dp, vertical = 12.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             // Top bar
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     stringResource(R.string.epg_title),
-                    fontSize = 17.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White
+                    color = Color.White.copy(alpha = 0.75f)
                 )
                 Spacer(Modifier.weight(1f))
                 Text(
                     stringResource(R.string.epg_ok_hint),
-                    fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.38f)
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = 0.32f)
                 )
                 Spacer(Modifier.weight(1f))
                 var clockTime by remember { mutableStateOf(timeFmt.format(Instant.now())) }
@@ -550,83 +538,78 @@ private fun EpgHeroSection(
                 }
                 Text(
                     "${dateFmt.format(now)} · $clockTime",
-                    fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.55f)
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.45f)
                 )
             }
 
-            Spacer(Modifier.height(14.dp))
-
-            // Program detail card
             if (program != null || channel != null) {
-                Column(
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.50f), RoundedCornerShape(8.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        program?.title ?: channel?.name ?: "",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (program != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    // Channel logo — contained in a fixed badge, never stretched to fill space
+                    // it wasn't drawn for.
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AppColors.Surface)
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AsyncImage(
+                            model = channel?.logoUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(44.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.width(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            program?.title ?: channel?.name ?: "",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (program != null) {
+                            val duration = (program.endTime.epochSecond - program.startTime.epochSecond).coerceAtLeast(1)
+                            val elapsed = (now.epochSecond - program.startTime.epochSecond).coerceIn(0, duration)
+                            val remaining = ((duration - elapsed) / 60).toInt()
+                            val progress = elapsed.toFloat() / duration.toFloat()
                             val isLive = program.startTime <= now && program.endTime > now
-                            if (isLive) MetadataBadge(stringResource(R.string.live_badge), AppColors.Red)
-                            program.genre?.let { if (it.isNotBlank()) MetadataBadge(it) }
-                            channel?.let { MetadataBadge(it.name) }
-                        }
-                        program.description?.let { desc ->
-                            if (desc.isNotBlank()) {
-                                Spacer(Modifier.height(6.dp))
+
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (isLive) MetadataBadge(stringResource(R.string.live_badge), AppColors.Red)
+                                program.genre?.let { if (it.isNotBlank()) MetadataBadge(it) }
+                                channel?.let { MetadataBadge(it.name) }
                                 Text(
-                                    desc,
-                                    fontSize = 13.sp,
-                                    color = Color.White.copy(alpha = 0.60f),
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
+                                    "${timeFmt.format(program.startTime)} – ${timeFmt.format(program.endTime)} · $remaining min",
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.5f)
                                 )
                             }
-                        }
 
-                        Spacer(Modifier.height(10.dp))
-
-                        val duration = (program.endTime.epochSecond - program.startTime.epochSecond).coerceAtLeast(1)
-                        val elapsed = (now.epochSecond - program.startTime.epochSecond).coerceIn(0, duration)
-                        val remaining = ((duration - elapsed) / 60).toInt()
-                        val progress = elapsed.toFloat() / duration.toFloat()
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                "${timeFmt.format(program.startTime)} – ${timeFmt.format(program.endTime)}",
-                                fontSize = 11.sp,
-                                color = Color.White.copy(alpha = 0.55f)
-                            )
-                            Text(
-                                "${remaining} min",
-                                fontSize = 11.sp,
-                                color = Color.White.copy(alpha = 0.55f)
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.7f)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(2.dp)),
+                                color = AppColors.Red,
+                                trackColor = Color.White.copy(alpha = 0.15f)
                             )
                         }
-                        Spacer(Modifier.height(5.dp))
-                        LinearProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
-                            color = AppColors.Red,
-                            trackColor = Color.White.copy(alpha = 0.15f)
-                        )
                     }
                 }
             }
@@ -831,26 +814,31 @@ private fun EpgChannelCell(
             Box(Modifier.width(3.dp).fillMaxHeight().background(AppColors.Purple))
         }
         Row(
-            modifier = Modifier.padding(start = 8.dp, end = 4.dp),
+            modifier = Modifier.padding(start = 6.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Text(
                 "${channel.number}",
                 fontSize = 9.sp,
                 color = if (isHighlighted) AppColors.Purple else AppColors.Purple.copy(alpha = 0.55f),
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.width(20.dp)
+                modifier = Modifier.width(15.dp)
             )
-            AsyncImage(
-                model = channel.logoUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
+            Box(
                 modifier = Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(Color.White.copy(alpha = 0.06f))
-            )
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(AppColors.Surface),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = channel.logoUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
         }
     }
 }
@@ -897,10 +885,13 @@ private fun HomeEpgRow(
             }
         } else {
             programs.forEachIndexed { blockIdx, program ->
-                // Clip to visible window
+                // Clip to visible window, and to the next program's start — some EPG feeds
+                // hand back overlapping entries, which without this renders two blocks on
+                // top of each other with their titles bleeding into one unreadable mess.
+                val nextStartSec = programs.getOrNull(blockIdx + 1)?.startTime?.epochSecond
                 val startSec = maxOf(program.startTime.epochSecond, windowStartSec)
-                val endSec = minOf(program.endTime.epochSecond, windowEndSec)
-                if (endSec <= windowStartSec || startSec >= windowEndSec) return@forEachIndexed
+                val endSec = minOf(program.endTime.epochSecond, windowEndSec, nextStartSec ?: Long.MAX_VALUE)
+                if (endSec <= windowStartSec || startSec >= windowEndSec || endSec <= startSec) return@forEachIndexed
 
                 val xDp = ((startSec - windowStartSec) / 60f * pxPerMin).dp
                 val widthDp = ((endSec - startSec) / 60f * pxPerMin).dp.coerceAtLeast(2.dp)

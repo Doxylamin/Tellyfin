@@ -30,7 +30,6 @@
     <string name="filter_all">All Channels</string>
     <string name="filter_favorites">Favourites (%1$d)</string>
     <string name="filter_search">Search</string>
-    <string name="home_hint">↑↓ Navigate  ·  OK Watch  ·  MENU Options</string>
 
     <!-- Channel list overlay -->
     <string name="channels">Channels</string>
