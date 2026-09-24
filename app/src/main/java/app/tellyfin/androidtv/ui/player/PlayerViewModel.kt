@@ -690,8 +690,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun handleNowPlayingKeys(keyCode: Int, state: PlayerUiState): Boolean {
         return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> { channelUp(); true }
-            KeyEvent.KEYCODE_DPAD_DOWN -> { channelDown(); true }
+            // Same countdown-preview behavior as plain playback's D-pad UP/DOWN — instant
+            // switching here (previously channelUp()/channelDown(), meant for the hardware
+            // CHANNEL+/- buttons) felt inconsistent with every other D-pad zap path.
+            KeyEvent.KEYCODE_DPAD_UP -> { previewChannelUp(); true }
+            KeyEvent.KEYCODE_DPAD_DOWN -> { previewChannelDown(); true }
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 dismissOverlay(); true
             }
