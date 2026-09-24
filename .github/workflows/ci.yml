@@ -37,41 +37,47 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+      - name: Run unit tests (both flavors)
+        run: ./gradlew testSentryDebugUnitTest testNoSentryDebugUnitTest
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-results
-          path: app/build/reports/tests/testDebugUnitTest/
+          path: app/build/reports/tests/
           retention-days: 14
 
-      - name: Run lint
-        run: ./gradlew lintDebug
+      - name: Run lint (both flavors)
+        run: ./gradlew lintSentryDebug lintNoSentryDebug
 
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lint-report
-          path: app/build/reports/lint/
+          # AGP now ignores the lint{} block's htmlOutput/sarifOutput and writes each variant's
+          # report next to build/reports/ directly, named by variant rather than into lint/.
+          path: app/build/reports/lint-results-*
           retention-days: 14
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: app/build/reports/lint/lint-results.sarif
+          # One flavor's findings are representative enough for code scanning; the full
+          # per-variant reports are still in the lint-report artifact above.
+          sarif_file: app/build/reports/lint-results-sentryDebug.sarif
         continue-on-error: true   # SARIF upload requires Advanced Security; skip gracefully on free repos
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Build debug APKs (both flavors)
+        run: ./gradlew assembleSentryDebug assembleNoSentryDebug
 
-      - name: Upload debug APK
+      - name: Upload debug APKs
         uses: actions/upload-artifact@v4
         with:
           name: tellyfin-debug-${{ github.sha }}
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/sentry/debug/app-sentry-debug.apk
+            app/build/outputs/apk/noSentry/debug/app-noSentry-debug.apk
           retention-days: 7
