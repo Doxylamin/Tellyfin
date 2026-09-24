@@ -90,6 +90,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Bundles native debug symbols (Media3/ExoPlayer, Sentry's native crash handler)
+            // into the AAB so Play can symbolicate native crashes/ANRs without a manual upload.
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
     }
 
