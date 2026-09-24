@@ -21,7 +21,9 @@ val keystorePath: String? = System.getenv("KEYSTORE_PATH")
 // The auth token authorizes uploading proguard mappings so release-build stack traces
 // symbolicate in Sentry. Like the keystore, it only ever comes from the environment —
 // its absence (e.g. local debug builds) just turns the upload off rather than failing.
-val sentryAuthToken: String? = System.getenv("SENTRY_AUTH_TOKEN")
+// An unset GitHub Actions secret expands to an empty string here, not a missing variable,
+// so a plain null-check alone would still "find" a token and fail uploading with it.
+val sentryAuthToken: String? = System.getenv("SENTRY_AUTH_TOKEN")?.takeIf { it.isNotBlank() }
 
 android {
     namespace = "app.tellyfin.androidtv"

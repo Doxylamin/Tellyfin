@@ -55,11 +55,6 @@ jobs:
           echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           echo "SENTRY_APK_NAME=tellyfin-sentry-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
           echo "NOSENTRY_APK_NAME=tellyfin-nosentry-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
-          # TODO(remove after 1.5.0 is the oldest version anyone runs): pre-1.5.0 installs use
-          # the old unsuffixed filename via download.php/.version.txt, which can't be updated
-          # retroactively. This bridge asset keeps their auto-update working for one more hop;
-          # 1.5.0+ clients use update.php and never look for this file.
-          echo "LEGACY_APK_NAME=tellyfin-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
 
       - name: Decode keystore
         run: |
@@ -83,9 +78,6 @@ jobs:
              "app/build/outputs/apk/sentry/release/${{ env.SENTRY_APK_NAME }}"
           mv app/build/outputs/apk/noSentry/release/app-noSentry-release.apk \
              "app/build/outputs/apk/noSentry/release/${{ env.NOSENTRY_APK_NAME }}"
-          # TODO(remove after 1.5.0 is the oldest version anyone runs): see LEGACY_APK_NAME above.
-          cp "app/build/outputs/apk/sentry/release/${{ env.SENTRY_APK_NAME }}" \
-             "app/build/outputs/apk/sentry/release/${{ env.LEGACY_APK_NAME }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -95,7 +87,6 @@ jobs:
           files: |
             app/build/outputs/apk/sentry/release/${{ env.SENTRY_APK_NAME }}
             app/build/outputs/apk/noSentry/release/${{ env.NOSENTRY_APK_NAME }}
-            app/build/outputs/apk/sentry/release/${{ env.LEGACY_APK_NAME }}
           body: |
             ## Which build?
 
