@@ -76,9 +76,9 @@ jobs:
 
       - name: Rename APKs
         run: |
-          mv app/build/outputs/apk/sentryDirect/release/app-sentryDirect-release.apk \
+          mv app/build/outputs/apk/sentryDirect/release/app-sentry-direct-release.apk \
              "app/build/outputs/apk/sentryDirect/release/${{ env.SENTRY_APK_NAME }}"
-          mv app/build/outputs/apk/noSentryDirect/release/app-noSentryDirect-release.apk \
+          mv app/build/outputs/apk/noSentryDirect/release/app-noSentry-direct-release.apk \
              "app/build/outputs/apk/noSentryDirect/release/${{ env.NOSENTRY_APK_NAME }}"
 
       - name: Create GitHub Release
@@ -121,9 +121,9 @@ jobs:
 
       - name: Rename store artifacts
         run: |
-          mv app/build/outputs/apk/sentryStore/release/app-sentryStore-release.apk \
+          mv app/build/outputs/apk/sentryStore/release/app-sentry-store-release.apk \
              "app/build/outputs/apk/sentryStore/release/${{ env.STORE_APK_NAME }}"
-          mv app/build/outputs/bundle/sentryStoreRelease/app-sentryStore-release.aab \
+          mv app/build/outputs/bundle/sentryStoreRelease/app-sentry-store-release.aab \
              "app/build/outputs/bundle/sentryStoreRelease/${{ env.STORE_AAB_NAME }}"
 
       # Store artifacts are always the sentry (crash-reporting) flavor with the in-app

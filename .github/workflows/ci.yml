@@ -78,6 +78,6 @@ jobs:
         with:
           name: tellyfin-debug-${{ github.sha }}
           path: |
-            app/build/outputs/apk/sentryDirect/debug/app-sentryDirect-debug.apk
-            app/build/outputs/apk/noSentryDirect/debug/app-noSentryDirect-debug.apk
+            app/build/outputs/apk/sentryDirect/debug/app-sentry-direct-debug.apk
+            app/build/outputs/apk/noSentryDirect/debug/app-noSentry-direct-debug.apk
           retention-days: 7
