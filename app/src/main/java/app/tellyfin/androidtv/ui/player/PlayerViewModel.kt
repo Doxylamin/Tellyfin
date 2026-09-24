@@ -293,6 +293,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** On start: once the splash is gone, offer to install a newer version. */
     private fun promptForUpdateIfAvailable() {
+        if (!BuildConfig.SELF_UPDATE_ENABLED) return
         viewModelScope.launch {
             val remote = updateChecker.fetchLatestVersion() ?: return@launch
             if (!UpdateChecker.isNewer(remote, BuildConfig.VERSION_NAME)) return@launch
@@ -856,6 +857,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun checkForUpdate() {
+        if (!BuildConfig.SELF_UPDATE_ENABLED) return
         if (_uiState.value.updateStatus is UpdateStatus.Checking ||
             _uiState.value.updateStatus is UpdateStatus.Downloading) return
         _uiState.value = _uiState.value.copy(updateStatus = UpdateStatus.Checking)

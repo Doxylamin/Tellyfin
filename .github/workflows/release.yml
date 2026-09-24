@@ -55,12 +55,14 @@ jobs:
           echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           echo "SENTRY_APK_NAME=tellyfin-sentry-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
           echo "NOSENTRY_APK_NAME=tellyfin-nosentry-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
+          echo "STORE_APK_NAME=tellyfin-store-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
+          echo "STORE_AAB_NAME=tellyfin-store-${VERSION_NAME}.aab" >> "$GITHUB_ENV"
 
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "${{ github.workspace }}/release.jks"
 
-      - name: Build signed release APKs (both flavors)
+      - name: Build signed release APKs (sideload, both telemetry flavors)
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -68,16 +70,16 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
-          ./gradlew assembleSentryRelease assembleNoSentryRelease \
+          ./gradlew assembleSentryDirectRelease assembleNoSentryDirectRelease \
             -PversionCode="${{ env.VERSION_CODE }}" \
             -PversionName="${{ env.VERSION_NAME }}"
 
       - name: Rename APKs
         run: |
-          mv app/build/outputs/apk/sentry/release/app-sentry-release.apk \
-             "app/build/outputs/apk/sentry/release/${{ env.SENTRY_APK_NAME }}"
-          mv app/build/outputs/apk/noSentry/release/app-noSentry-release.apk \
-             "app/build/outputs/apk/noSentry/release/${{ env.NOSENTRY_APK_NAME }}"
+          mv app/build/outputs/apk/sentryDirect/release/app-sentryDirect-release.apk \
+             "app/build/outputs/apk/sentryDirect/release/${{ env.SENTRY_APK_NAME }}"
+          mv app/build/outputs/apk/noSentryDirect/release/app-noSentryDirect-release.apk \
+             "app/build/outputs/apk/noSentryDirect/release/${{ env.NOSENTRY_APK_NAME }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -85,8 +87,8 @@ jobs:
           name: "Tellyfin ${{ env.VERSION_NAME }}"
           prerelease: ${{ contains(env.VERSION_NAME, '-') }}
           files: |
-            app/build/outputs/apk/sentry/release/${{ env.SENTRY_APK_NAME }}
-            app/build/outputs/apk/noSentry/release/${{ env.NOSENTRY_APK_NAME }}
+            app/build/outputs/apk/sentryDirect/release/${{ env.SENTRY_APK_NAME }}
+            app/build/outputs/apk/noSentryDirect/release/${{ env.NOSENTRY_APK_NAME }}
           body: |
             ## Which build?
 
@@ -104,5 +106,38 @@ jobs:
                ```
                adb install <the .apk you downloaded>
                ```
+
+      - name: Build store release (APK for Amazon, AAB for Google Play)
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          ./gradlew assembleSentryStoreRelease bundleSentryStoreRelease \
+            -PversionCode="${{ env.VERSION_CODE }}" \
+            -PversionName="${{ env.VERSION_NAME }}"
+
+      - name: Rename store artifacts
+        run: |
+          mv app/build/outputs/apk/sentryStore/release/app-sentryStore-release.apk \
+             "app/build/outputs/apk/sentryStore/release/${{ env.STORE_APK_NAME }}"
+          mv app/build/outputs/bundle/sentryStoreRelease/app-sentryStore-release.aab \
+             "app/build/outputs/bundle/sentryStoreRelease/${{ env.STORE_AAB_NAME }}"
+
+      # Store artifacts are always the sentry (crash-reporting) flavor with the in-app
+      # updater compiled out. They're not attached to the public GitHub Release — that page
+      # is for sideloading, and a build that can't self-update would be a confusing pick
+      # there. Instead they're workflow artifacts for us to manually submit to each console;
+      # neither Play nor Amazon accepts fully automated first-time submissions anyway.
+      - name: Upload store artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tellyfin-store-${{ env.VERSION_NAME }}
+          path: |
+            app/build/outputs/apk/sentryStore/release/${{ env.STORE_APK_NAME }}
+            app/build/outputs/bundle/sentryStoreRelease/${{ env.STORE_AAB_NAME }}
+          retention-days: 90
 
             **versionCode:** ${{ env.VERSION_CODE }}

@@ -47,13 +47,25 @@ android {
     // `noSentry` doesn't — its APK contains zero Sentry code, not just a disabled flag. Same
     // applicationId on purpose — installing one is meant to replace the other, matching normal
     // "pick a build and go" expectations, not run side by side as separate apps.
-    flavorDimensions += "telemetry"
+    //
+    // `distribution` is orthogonal: `direct` is today's sideload build with the in-app
+    // updater active; `store` is for Play/Amazon, where self-updating outside the store's
+    // own mechanism is against policy, so the updater is compiled in but never triggers.
+    flavorDimensions += listOf("telemetry", "distribution")
     productFlavors {
         create("sentry") {
             dimension = "telemetry"
         }
         create("noSentry") {
             dimension = "telemetry"
+        }
+        create("direct") {
+            dimension = "distribution"
+            buildConfigField("boolean", "SELF_UPDATE_ENABLED", "true")
+        }
+        create("store") {
+            dimension = "distribution"
+            buildConfigField("boolean", "SELF_UPDATE_ENABLED", "false")
         }
     }
 

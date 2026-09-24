@@ -38,7 +38,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run unit tests (both flavors)
-        run: ./gradlew testSentryDebugUnitTest testNoSentryDebugUnitTest
+        run: ./gradlew testSentryDirectDebugUnitTest testNoSentryDirectDebugUnitTest
 
       - name: Upload test results
         if: always()
@@ -49,7 +49,7 @@ jobs:
           retention-days: 14
 
       - name: Run lint (both flavors)
-        run: ./gradlew lintSentryDebug lintNoSentryDebug
+        run: ./gradlew lintSentryDirectDebug lintNoSentryDirectDebug
 
       - name: Upload lint report
         if: always()
@@ -67,17 +67,17 @@ jobs:
         with:
           # One flavor's findings are representative enough for code scanning; the full
           # per-variant reports are still in the lint-report artifact above.
-          sarif_file: app/build/reports/lint-results-sentryDebug.sarif
+          sarif_file: app/build/reports/lint-results-sentryDirectDebug.sarif
         continue-on-error: true   # SARIF upload requires Advanced Security; skip gracefully on free repos
 
       - name: Build debug APKs (both flavors)
-        run: ./gradlew assembleSentryDebug assembleNoSentryDebug
+        run: ./gradlew assembleSentryDirectDebug assembleNoSentryDirectDebug
 
       - name: Upload debug APKs
         uses: actions/upload-artifact@v4
         with:
           name: tellyfin-debug-${{ github.sha }}
           path: |
-            app/build/outputs/apk/sentry/debug/app-sentry-debug.apk
-            app/build/outputs/apk/noSentry/debug/app-noSentry-debug.apk
+            app/build/outputs/apk/sentryDirect/debug/app-sentryDirect-debug.apk
+            app/build/outputs/apk/noSentryDirect/debug/app-noSentryDirect-debug.apk
           retention-days: 7
