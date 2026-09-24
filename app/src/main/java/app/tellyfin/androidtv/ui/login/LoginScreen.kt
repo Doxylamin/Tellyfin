@@ -247,7 +247,11 @@ private val ButtonContentPadding = PaddingValues(horizontal = 16.dp, vertical = 
 
 @Composable
 private fun SignInStep(state: LoginUiState, viewModel: LoginViewModel, focusManager: FocusManager) {
-    SignInTabs(selected = state.signInMethod, onSelect = viewModel::selectSignInMethod)
+    SignInTabs(
+        selected = state.signInMethod,
+        showQuickConnect = state.quickConnectAvailable,
+        onSelect = viewModel::selectSignInMethod
+    )
 
     when (state.signInMethod) {
         SignInMethod.PASSWORD -> {
@@ -298,10 +302,12 @@ private fun SignInStep(state: LoginUiState, viewModel: LoginViewModel, focusMana
 }
 
 @Composable
-private fun SignInTabs(selected: SignInMethod, onSelect: (SignInMethod) -> Unit) {
+private fun SignInTabs(selected: SignInMethod, showQuickConnect: Boolean, onSelect: (SignInMethod) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         TabItem("Sign in", selected == SignInMethod.PASSWORD) { onSelect(SignInMethod.PASSWORD) }
-        TabItem("Quick Connect", selected == SignInMethod.QUICK_CONNECT) { onSelect(SignInMethod.QUICK_CONNECT) }
+        if (showQuickConnect) {
+            TabItem("Quick Connect", selected == SignInMethod.QUICK_CONNECT) { onSelect(SignInMethod.QUICK_CONNECT) }
+        }
     }
 }
 

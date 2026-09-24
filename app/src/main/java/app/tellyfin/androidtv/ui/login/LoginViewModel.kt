@@ -31,6 +31,7 @@ data class LoginUiState(
     val error: String? = null,
     val isLoggedIn: Boolean = false,
     val quickConnectCode: String? = null,
+    val quickConnectAvailable: Boolean = false,
     val splashscreenUrl: String? = null,
     val loginDisclaimer: String? = null,
     val serverName: String? = null
@@ -89,6 +90,11 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val info = jellyfinRepo.probeServer(candidate)
                     val branding = runCatching { jellyfinRepo.getBrandingOptions(candidate) }.getOrNull()
+                    // Older servers, or ones with the feature turned off, don't expose Quick
+                    // Connect at all — fall back to password sign-in rather than offering a
+                    // button that can never succeed.
+                    val quickConnectAvailable = runCatching { jellyfinRepo.isQuickConnectEnabled(candidate) }
+                        .getOrDefault(false)
                     _state.value = _state.value.copy(
                         isLoading = false,
                         step = LoginStep.SIGN_IN,
@@ -97,7 +103,9 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                         splashscreenUrl = branding
                             ?.takeIf { it.splashscreenEnabled }
                             ?.let { splashscreenUrl(candidate) },
-                        loginDisclaimer = branding?.loginDisclaimer?.takeIf { it.isNotBlank() }
+                        loginDisclaimer = branding?.loginDisclaimer?.takeIf { it.isNotBlank() },
+                        quickConnectAvailable = quickConnectAvailable,
+                        signInMethod = if (quickConnectAvailable) _state.value.signInMethod else SignInMethod.PASSWORD
                     )
                     if (_state.value.signInMethod == SignInMethod.QUICK_CONNECT) startQuickConnect()
                     return@launch

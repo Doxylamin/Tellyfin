@@ -98,6 +98,11 @@ class JellyfinRepository(private val context: Context) {
         return Triple(url, token, uid)
     }
 
+    suspend fun isQuickConnectEnabled(serverUrl: String): Boolean {
+        val tempApi = jellyfin.createApi(baseUrl = serverUrl.trimEnd('/'))
+        return tempApi.quickConnectApi.getQuickConnectEnabled().content
+    }
+
     suspend fun initiateQuickConnect(serverUrl: String): QuickConnectResult {
         val tempApi = jellyfin.createApi(baseUrl = serverUrl.trimEnd('/'))
         return tempApi.quickConnectApi.initiateQuickConnect().content
