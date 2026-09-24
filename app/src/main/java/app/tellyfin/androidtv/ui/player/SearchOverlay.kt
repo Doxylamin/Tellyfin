@@ -74,7 +74,9 @@ fun SearchOverlay(
     results: List<SearchResult>,
     favoriteChannelIds: Set<UUID>,
     visible: Boolean,
+    fieldFocused: Boolean,
     onQueryChange: (String) -> Unit,
+    onFieldFocusLeft: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -119,7 +121,9 @@ fun SearchOverlay(
                 SearchTextField(
                     query = query,
                     visible = visible,
+                    focused = fieldFocused,
                     onQueryChange = onQueryChange,
+                    onFocusLeft = onFieldFocusLeft,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -141,15 +145,17 @@ fun SearchOverlay(
 private fun SearchTextField(
     query: String,
     visible: Boolean,
+    focused: Boolean,
     onQueryChange: (String) -> Unit,
+    onFocusLeft: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    LaunchedEffect(visible) {
-        if (visible) {
+    LaunchedEffect(visible, focused) {
+        if (visible && focused) {
             runCatching { focusRequester.requestFocus() }
         }
     }
@@ -158,7 +164,8 @@ private fun SearchTextField(
         value = query,
         onValueChange = onQueryChange,
         // When the user navigates away (D-pad / OK / Search action), clear focus so the
-        // IME disconnects and won't reopen on the next key event.
+        // IME disconnects and won't reopen on the next key event, and tell the view model
+        // so pressing Up from the top of the results can send focus back here later.
         modifier = modifier
             .focusRequester(focusRequester)
             .onPreviewKeyEvent { event ->
@@ -168,6 +175,7 @@ private fun SearchTextField(
                         Key.DirectionCenter, Key.Enter -> {
                             keyboardController?.hide()
                             focusManager.clearFocus()
+                            onFocusLeft()
                             false  // let the event reach the Activity key handler
                         }
                         else -> false
@@ -185,6 +193,7 @@ private fun SearchTextField(
         keyboardActions = KeyboardActions(onSearch = {
             keyboardController?.hide()
             focusManager.clearFocus()
+            onFocusLeft()
         }),
         decorationBox = { innerTextField ->
             Row(

@@ -101,6 +101,7 @@ data class PlayerUiState(
     val searchQuery: String = "",
     val searchResultIndex: Int = 0,
     val searchResults: List<SearchResult> = emptyList(),
+    val searchFieldFocused: Boolean = true,
     val updateStatus: UpdateStatus = UpdateStatus.Idle,
     val pendingInstallFile: File? = null,
     val bitratePickerOpen: Boolean = false,
@@ -924,8 +925,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun handleSearchKeys(keyCode: Int, state: PlayerUiState): Boolean {
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
-                if (state.searchResultIndex > 0)
-                    _uiState.value = state.copy(searchResultIndex = state.searchResultIndex - 1)
+                // Already at the top result (or no results at all) — send focus back to the
+                // text field instead of doing nothing, so the query is actually editable again.
+                _uiState.value = if (state.searchResultIndex > 0)
+                    state.copy(searchResultIndex = state.searchResultIndex - 1)
+                else
+                    state.copy(searchFieldFocused = true)
                 true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
@@ -972,8 +977,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             overlay = Overlay.Search,
             searchQuery = "",
             searchResultIndex = 0,
-            searchResults = emptyList()
+            searchResults = emptyList(),
+            searchFieldFocused = true
         )
+    }
+
+    fun onSearchFieldFocusLeft() {
+        _uiState.value = _uiState.value.copy(searchFieldFocused = false)
     }
 
     private fun clearSearch() {

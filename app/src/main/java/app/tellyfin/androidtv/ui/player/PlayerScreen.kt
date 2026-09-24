@@ -228,7 +228,9 @@ fun PlayerScreen(
             results = state.searchResults,
             favoriteChannelIds = state.favoriteChannelIds,
             visible = state.overlay is Overlay.Search,
-            onQueryChange = { viewModel.updateSearchQuery(it) }
+            fieldFocused = state.searchFieldFocused,
+            onQueryChange = { viewModel.updateSearchQuery(it) },
+            onFieldFocusLeft = { viewModel.onSearchFieldFocusLeft() }
         )
     }
 }
