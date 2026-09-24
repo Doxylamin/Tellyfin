@@ -17,13 +17,17 @@ import app.tellyfin.androidtv.BuildConfig
 import app.tellyfin.androidtv.data.UpdateChecker
 import app.tellyfin.androidtv.data.api.JellyfinRepository
 import app.tellyfin.androidtv.data.api.ServerAuth
+import app.tellyfin.androidtv.data.api.splashscreenUrl
 import app.tellyfin.androidtv.data.model.Channel
 import app.tellyfin.androidtv.data.model.Program
 import app.tellyfin.androidtv.data.prefs.PreferencesRepository
+import app.tellyfin.androidtv.diagnostics.CrashReporting
+import app.tellyfin.androidtv.diagnostics.ReportLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -74,6 +78,7 @@ const val SETTINGS_FOCUS_LOGOUT    = 2  // Account card, bottom
 data class PlayerUiState(
     val isLoadingChannels: Boolean = true,
     val loadingStatus: String = "Connecting to server…",
+    val startupError: String? = null,
     val channels: List<Channel> = emptyList(),
     val currentIndex: Int = 0,
     val highlightedIndex: Int = 0,
@@ -101,7 +106,9 @@ data class PlayerUiState(
     val bitratePickerOpen: Boolean = false,
     val bitratePickerIndex: Int = 0,
     /** 0 = Install now, 1 = Later */
-    val updatePromptButtonIndex: Int = 0
+    val updatePromptButtonIndex: Int = 0,
+    val serverName: String? = null,
+    val splashscreenUrl: String? = null
 ) {
     val currentChannel: Channel? get() = channels.getOrNull(currentIndex)
     val highlightedChannel: Channel? get() = channels.getOrNull(highlightedIndex)
@@ -137,6 +144,10 @@ val BITRATE_OPTIONS = listOf(
     20_000_000 to "20 Mbps",
     40_000_000 to "40 Mbps"
 )
+
+// Never leave the user staring at the splash forever: give the saved-session restore +
+// channel/EPG load this long in total before surfacing an error with a way out.
+private const val STARTUP_TIMEOUT_MS = 20_000L
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -200,30 +211,84 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var userId: String = ""
 
     init {
-        viewModelScope.launch {
-            val token = prefsRepo.accessToken.first() ?: return@launch
-            val url = prefsRepo.serverUrl.first() ?: return@launch
-            userId = prefsRepo.userId.first() ?: return@launch
-            val lastIndex = prefsRepo.lastChannelIndex.first()
-            val maxBitrate = prefsRepo.maxBitrate.first()
-            val favIds = prefsRepo.favoriteIds.first()
-                .mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() }
-                .toSet()
+        breadcrumb("PlayerViewModel constructed")
 
-            val username = prefsRepo.username.first()
-            jellyfinRepo.configure(url, token, userId)
-            ServerAuth.authHeader?.let { header ->
-                httpDataSourceFactory.setDefaultRequestProperties(mapOf("Authorization" to header))
-            }
+        // A truly independent coroutine, not a withTimeoutOrNull wrapped around the sequence
+        // below: if that sequence is stuck in a suspend call that doesn't actually honor
+        // cancellation (some blocking-I/O-under-a-suspend-facade calls don't), cancelling its
+        // Job never resumes it, and a timeout *wrapping* it would never return either. A plain
+        // delay() on its own coroutine always fires on schedule regardless of what else hangs.
+        val watchdog = viewModelScope.launch {
+            delay(STARTUP_TIMEOUT_MS)
+            val message = "Startup timed out after ${STARTUP_TIMEOUT_MS}ms restoring the saved session"
+            breadcrumb(message)
+            CrashReporting.captureMessage(message, ReportLevel.ERROR)
             _uiState.value = _uiState.value.copy(
-                maxBitrate = maxBitrate,
-                favoriteChannelIds = favIds,
-                username = username,
-                loadingStatus = "Loading channels…"
+                isLoadingChannels = false,
+                startupError = "This is taking longer than expected. You can try signing in again."
             )
-            loadChannels(startIndex = lastIndex)
+        }
+
+        viewModelScope.launch {
+            // finally, not a call at the end of the happy path: an early return@launch (no saved
+            // session — shouldn't normally happen since this ViewModel is only ever constructed
+            // once already logged in, but was the actual bug before that was fixed) used to leave
+            // the watchdog running, so it fired 20s later and poisoned state that a much later,
+            // real login would then immediately show as a stale error with no loading at all.
+            try {
+                breadcrumb("init coroutine started")
+                val token = prefsRepo.accessToken.first() ?: return@launch
+                breadcrumb("accessToken read")
+                val url = prefsRepo.serverUrl.first() ?: return@launch
+                breadcrumb("serverUrl read")
+                userId = prefsRepo.userId.first() ?: return@launch
+                breadcrumb("userId read")
+                val lastIndex = prefsRepo.lastChannelIndex.first()
+                val maxBitrate = prefsRepo.maxBitrate.first()
+                val favIds = prefsRepo.favoriteIds.first()
+                    .mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() }
+                    .toSet()
+                val username = prefsRepo.username.first()
+                breadcrumb("remaining prefs read")
+                jellyfinRepo.configure(url, token, userId)
+                breadcrumb("jellyfinRepo.configure() done")
+                ServerAuth.authHeader?.let { header ->
+                    httpDataSourceFactory.setDefaultRequestProperties(mapOf("Authorization" to header))
+                }
+                _uiState.value = _uiState.value.copy(
+                    maxBitrate = maxBitrate,
+                    favoriteChannelIds = favIds,
+                    username = username,
+                    loadingStatus = "Loading channels…"
+                )
+                loadChannels(startIndex = lastIndex)
+            } finally {
+                watchdog.cancel()
+            }
         }
         promptForUpdateIfAvailable()
+        loadBranding()
+    }
+
+    /** Timestamped breadcrumb — visible in any event captured during this session, on sentry.io,
+     *  without needing a live adb session to reproduce and capture locally. No-op on the
+     *  no-Sentry flavor. */
+    private fun breadcrumb(message: String) = CrashReporting.addBreadcrumb(message, "startup")
+
+    /** Best-effort and separate from the channel/EPG load: a slow or failed branding fetch
+     *  must never hold up (or be blamed for) the app actually becoming usable. */
+    private fun loadBranding() {
+        viewModelScope.launch {
+            val url = prefsRepo.serverUrl.first() ?: return@launch
+            breadcrumb("loadBranding() calling probeServer()/getBrandingOptions()")
+            val info = runCatching { jellyfinRepo.probeServer(url) }.getOrNull()
+            val branding = runCatching { jellyfinRepo.getBrandingOptions(url) }.getOrNull()
+            breadcrumb("loadBranding() finished")
+            _uiState.value = _uiState.value.copy(
+                serverName = info?.serverName?.takeIf { it.isNotBlank() },
+                splashscreenUrl = branding?.takeIf { it.splashscreenEnabled }?.let { splashscreenUrl(url) }
+            )
+        }
     }
 
     /** On start: once the splash is gone, offer to install a newer version. */
@@ -243,9 +308,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Called from within the init sequence's own timeout window, so getChannels()/
+     *  getEpgPrograms() hanging is caught by the same watchdog as the prefs reads. */
     private suspend fun loadChannels(startIndex: Int) {
+        breadcrumb("loadChannels() calling getChannels()")
         try {
             val channels = jellyfinRepo.getChannels()
+            breadcrumb("getChannels() returned ${channels.size} channels")
             val safeIndex = startIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
             // Keep splash visible (isLoadingChannels stays true) until EPG also finishes
             _uiState.value = _uiState.value.copy(
@@ -258,6 +327,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             )
             loadEpg()
         } catch (e: Exception) {
+            breadcrumb("getChannels() failed: ${e.message}")
             _uiState.value = _uiState.value.copy(
                 isLoadingChannels = false,
                 error = "Failed to load channels: ${e.message}"
@@ -265,18 +335,19 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun loadEpg() {
-        viewModelScope.launch {
-            try {
-                val ids = _uiState.value.channels.map { it.id }
-                val programs = jellyfinRepo.getEpgPrograms(ids)
-                _uiState.value = _uiState.value.copy(
-                    epgData = programs,
-                    isLoadingChannels = false
-                )
-            } catch (_: Exception) {
-                _uiState.value = _uiState.value.copy(isLoadingChannels = false)
-            }
+    private suspend fun loadEpg() {
+        breadcrumb("loadEpg() calling getEpgPrograms()")
+        try {
+            val ids = _uiState.value.channels.map { it.id }
+            val programs = jellyfinRepo.getEpgPrograms(ids)
+            breadcrumb("getEpgPrograms() returned")
+            _uiState.value = _uiState.value.copy(
+                epgData = programs,
+                isLoadingChannels = false
+            )
+        } catch (e: Exception) {
+            breadcrumb("getEpgPrograms() failed: ${e.message}")
+            _uiState.value = _uiState.value.copy(isLoadingChannels = false)
         }
     }
 

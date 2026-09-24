@@ -9,9 +9,11 @@ import android.view.ViewConfiguration
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.FileProvider
+import app.tellyfin.androidtv.diagnostics.CrashReporting
 import app.tellyfin.androidtv.ui.login.LoginScreen
 import app.tellyfin.androidtv.ui.login.LoginViewModel
 import app.tellyfin.androidtv.ui.player.PlayerScreen
@@ -34,6 +36,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             TellyfinTheme {
                 val loginState by loginViewModel.state.collectAsState()
+                LaunchedEffect(loginState.isLoggedIn) {
+                    CrashReporting.addBreadcrumb(
+                        "MainActivity composing " + if (loginState.isLoggedIn) "PlayerScreen" else "LoginScreen",
+                        "navigation"
+                    )
+                }
                 if (loginState.isLoggedIn) {
                     PlayerScreen(
                         viewModel = playerViewModel,
@@ -61,14 +69,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        playerViewModel.onEnterForeground()
+        // playerViewModel is created lazily on first access — touching it here unconditionally
+        // used to force it into existence (running its whole init{} sequence, watchdog included)
+        // on every app launch, even before the user was logged in.
+        if (loginViewModel.state.value.isLoggedIn) {
+            playerViewModel.onEnterForeground()
+        }
     }
 
     // onStop rather than onPause: transient overlays (dialogs, the recents switcher)
     // pause the activity without hiding it, and should not interrupt playback.
     override fun onStop() {
         super.onStop()
-        playerViewModel.onEnterBackground()
+        if (loginViewModel.state.value.isLoggedIn) {
+            playerViewModel.onEnterBackground()
+        }
     }
 
     override fun onDestroy() {

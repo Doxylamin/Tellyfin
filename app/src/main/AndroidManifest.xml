@@ -22,6 +22,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Tellyfin">
 
+        <!-- Sentry is initialized manually in TellyfinApp.onCreate() using BuildConfig.SENTRY_DSN.
+             Without this flag, Sentry's own auto-init ContentProvider runs before onCreate() and
+             crashes the app on launch looking for a DSN in manifest meta-data that's never set. -->
+        <meta-data android:name="io.sentry.auto-init" android:value="false" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize"

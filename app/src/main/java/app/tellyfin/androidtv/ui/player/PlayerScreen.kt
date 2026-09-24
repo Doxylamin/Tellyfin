@@ -43,8 +43,15 @@ fun PlayerScreen(
         }
     }
 
-    if (state.isLoadingChannels) {
-        SplashScreen(status = state.loadingStatus, modifier = Modifier.fillMaxSize())
+    if (state.isLoadingChannels || state.startupError != null) {
+        SplashScreen(
+            status = state.loadingStatus,
+            serverName = state.serverName,
+            splashscreenUrl = state.splashscreenUrl,
+            error = state.startupError,
+            onLogOut = viewModel::logOut,
+            modifier = Modifier.fillMaxSize()
+        )
         return
     }
 

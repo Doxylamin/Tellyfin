@@ -1,16 +1,61 @@
 package app.tellyfin.androidtv.data.prefs
 
 import android.content.Context
+import androidx.datastore.core.DataMigration
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import app.tellyfin.androidtv.diagnostics.CrashReporting
+import java.io.File
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withTimeoutOrNull
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "jellytv_prefs")
+// One-time migration off the pre-rebrand "jellytv_prefs" file so existing installs keep
+// their saved server/login/favourites instead of being silently logged out on update.
+private class LegacyPrefsMigration(private val context: Context) : DataMigration<Preferences> {
+    private fun legacyFile() = File(context.filesDir, "datastore/jellytv_prefs.preferences_pb")
+
+    // Only set once migrate() has actually read the legacy file, so cleanUp() never deletes it
+    // out from under a timed-out attempt — that data has to survive for a later retry.
+    private var migrated = false
+
+    override suspend fun shouldMigrate(currentData: Preferences): Boolean =
+        currentData.asMap().isEmpty() && legacyFile().exists()
+
+    override suspend fun migrate(currentData: Preferences): Preferences {
+        CrashReporting.addBreadcrumb("LegacyPrefsMigration.migrate() starting", "startup")
+        // A process from an older install can still be resident and holding this file's lock
+        // (e.g. after a sideload update without a force-stop) — that must never block the whole
+        // app's startup waiting on a one-time convenience migration.
+        val legacyData = withTimeoutOrNull(LEGACY_MIGRATION_TIMEOUT_MS) {
+            val legacyStore = PreferenceDataStoreFactory.create(produceFile = ::legacyFile)
+            legacyStore.data.first()
+        }
+        migrated = legacyData != null
+        CrashReporting.addBreadcrumb(
+            if (migrated) "LegacyPrefsMigration read legacy data" else "LegacyPrefsMigration timed out / no legacy data",
+            "startup"
+        )
+        return legacyData ?: currentData
+    }
+
+    override suspend fun cleanUp() {
+        if (migrated) legacyFile().delete()
+    }
+}
+
+private const val LEGACY_MIGRATION_TIMEOUT_MS = 2_000L
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "tellyfin_prefs",
+    produceMigrations = { context -> listOf(LegacyPrefsMigration(context)) }
+)
 
 class PreferencesRepository(private val context: Context) {
 
@@ -35,12 +80,14 @@ class PreferencesRepository(private val context: Context) {
     }
 
     suspend fun saveSession(serverUrl: String, accessToken: String, userId: String, username: String = "") {
+        CrashReporting.addBreadcrumb("PreferencesRepository.saveSession() calling dataStore.edit()", "prefs")
         context.dataStore.edit { prefs ->
             prefs[Keys.SERVER_URL] = serverUrl.trimEnd('/')
             prefs[Keys.ACCESS_TOKEN] = accessToken
             prefs[Keys.USER_ID] = userId
             if (username.isNotBlank()) prefs[Keys.USERNAME] = username
         }
+        CrashReporting.addBreadcrumb("PreferencesRepository.saveSession() dataStore.edit() returned", "prefs")
     }
 
     suspend fun saveLastChannelIndex(index: Int) {

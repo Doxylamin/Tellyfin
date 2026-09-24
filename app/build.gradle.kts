@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("io.sentry.android.gradle")
 }
 
 // CI passes -PversionCode and -PversionName via the command line.
@@ -8,9 +9,19 @@ plugins {
 val ciVersionCode = (project.findProperty("versionCode") as? String)?.toInt() ?: 1
 val ciVersionName = (project.findProperty("versionName") as? String) ?: "1.0"
 
+// DSNs are ingest endpoints, not secrets, so a working default ships in the repo.
+// SENTRY_DSN lets CI/forks point at a different project without editing this file.
+val sentryDsn = System.getenv("SENTRY_DSN")
+    ?: "https://d82ee917522c3dfd60bd2738553123a2@o470302.ingest.us.sentry.io/4512139886526464"
+
 // Release signing is driven entirely by environment variables so no
 // keystore file ever lives in the repository.
 val keystorePath: String? = System.getenv("KEYSTORE_PATH")
+
+// The auth token authorizes uploading proguard mappings so release-build stack traces
+// symbolicate in Sentry. Like the keystore, it only ever comes from the environment —
+// its absence (e.g. local debug builds) just turns the upload off rather than failing.
+val sentryAuthToken: String? = System.getenv("SENTRY_AUTH_TOKEN")
 
 android {
     namespace = "app.tellyfin.androidtv"
@@ -23,10 +34,24 @@ android {
         versionCode = ciVersionCode
         versionName = ciVersionName
         buildConfigField("String", "VERSION_NAME", "\"$ciVersionName\"")
+        buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
     }
 
     buildFeatures {
         buildConfig = true
+    }
+
+    // Two variants for CI: `sentry` has the crash-reporting SDK as a dependency at all;
+    // `noSentry` doesn't — its APK contains zero Sentry code, not just a disabled flag.
+    flavorDimensions += "telemetry"
+    productFlavors {
+        create("sentry") {
+            dimension = "telemetry"
+        }
+        create("noSentry") {
+            dimension = "telemetry"
+            applicationIdSuffix = ".nosentry"
+        }
     }
 
     if (keystorePath != null) {
@@ -80,6 +105,30 @@ android {
     }
 }
 
+sentry {
+    org.set("msitpro-development")
+    projectName.set("tellyfin")
+    authToken.set(sentryAuthToken)
+    autoUploadProguardMapping.set(sentryAuthToken != null)
+    // The noSentry flavor doesn't depend on the Sentry SDK at all — nothing to instrument
+    // or upload mappings for.
+    ignoredFlavors = listOf("noSentry")
+    // We init manually and don't use Fragments or Compose performance tracing. Auto-installation
+    // was also pulling in companion modules (sentry-compose, sentry-android-fragment) pinned to
+    // a different version (8.56.0) than our explicit sentry-android (8.58.0), which crashed the
+    // app on launch — Sentry refuses to start with mismatched module versions.
+    autoInstallation {
+        enabled = false
+    }
+    // Bytecode-level instrumentation (a separate mechanism from autoInstallation's dependency
+    // adding) still wove in a reference to io.sentry.okhttp.SentryOkHttpEventListener despite
+    // its dependency being disabled above, crashing with NoClassDefFoundError the moment any
+    // OkHttpClient was built. We don't use Sentry performance tracing at all, so turn this off.
+    tracingInstrumentation {
+        enabled = false
+    }
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
@@ -93,6 +142,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.1")
     implementation("androidx.navigation:navigation-compose:2.7.7")
@@ -119,6 +169,9 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // Crash/error reporting — only the `sentry` flavor depends on this at all
+    "sentryImplementation"("io.sentry:sentry-android:8.58.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

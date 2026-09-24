@@ -11,17 +11,24 @@ import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.createJellyfin
 import org.jellyfin.sdk.android.androidDevice
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.brandingApi
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.api.client.extensions.playStateApi
+import org.jellyfin.sdk.api.client.extensions.quickConnectApi
+import org.jellyfin.sdk.api.client.extensions.systemApi
 import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.api.AuthenticateUserByName
+import org.jellyfin.sdk.model.api.BrandingOptionsDto
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.PlayMethod
 import org.jellyfin.sdk.model.api.PlaybackOrder
 import org.jellyfin.sdk.model.api.PlaybackProgressInfo
 import org.jellyfin.sdk.model.api.PlaybackStartInfo
 import org.jellyfin.sdk.model.api.PlaybackStopInfo
+import org.jellyfin.sdk.model.api.PublicSystemInfo
+import org.jellyfin.sdk.model.api.QuickConnectDto
+import org.jellyfin.sdk.model.api.QuickConnectResult
 import org.jellyfin.sdk.model.api.RepeatMode
 import org.jellyfin.sdk.model.api.SortOrder
 import java.time.Instant
@@ -66,12 +73,43 @@ class JellyfinRepository(private val context: Context) {
     val baseUrl: String get() = serverUrl
     val token: String get() = accessToken
 
+    /** Confirms the address is actually a reachable Jellyfin server, before asking for credentials. */
+    suspend fun probeServer(serverUrl: String): PublicSystemInfo {
+        val tempApi = jellyfin.createApi(baseUrl = serverUrl.trimEnd('/'))
+        return tempApi.systemApi.getPublicSystemInfo().content
+    }
+
+    /** Best-effort: callers should treat a failure here as "no branding", not a fatal error. */
+    suspend fun getBrandingOptions(serverUrl: String): BrandingOptionsDto {
+        val tempApi = jellyfin.createApi(baseUrl = serverUrl.trimEnd('/'))
+        return tempApi.brandingApi.getBrandingOptions().content
+    }
+
     suspend fun authenticate(serverUrl: String, username: String, password: String): Triple<String, String, String> {
         val url = serverUrl.trimEnd('/')
         val tempApi = jellyfin.createApi(baseUrl = url)
         val result = tempApi.userApi.authenticateUserByName(
             data = AuthenticateUserByName(username = username, pw = password)
         )
+        val token = result.content.accessToken ?: error("No access token returned")
+        val uid = result.content.user?.id?.toString() ?: error("No user ID returned")
+        return Triple(url, token, uid)
+    }
+
+    suspend fun initiateQuickConnect(serverUrl: String): QuickConnectResult {
+        val tempApi = jellyfin.createApi(baseUrl = serverUrl.trimEnd('/'))
+        return tempApi.quickConnectApi.initiateQuickConnect().content
+    }
+
+    suspend fun getQuickConnectState(serverUrl: String, secret: String): QuickConnectResult {
+        val tempApi = jellyfin.createApi(baseUrl = serverUrl.trimEnd('/'))
+        return tempApi.quickConnectApi.getQuickConnectState(secret).content
+    }
+
+    suspend fun authenticateWithQuickConnect(serverUrl: String, secret: String): Triple<String, String, String> {
+        val url = serverUrl.trimEnd('/')
+        val tempApi = jellyfin.createApi(baseUrl = url)
+        val result = tempApi.userApi.authenticateWithQuickConnect(QuickConnectDto(secret = secret))
         val token = result.content.accessToken ?: error("No access token returned")
         val uid = result.content.user?.id?.toString() ?: error("No user ID returned")
         return Triple(url, token, uid)
@@ -246,6 +284,36 @@ class JellyfinRepository(private val context: Context) {
                 )
             )
         } catch (_: Exception) {}
+    }
+}
+
+/** Publicly accessible even pre-login, same as the official clients' login-screen backdrop. */
+internal fun splashscreenUrl(serverUrl: String): String = "${serverUrl.trimEnd('/')}/Branding/Splashscreen"
+
+// Jellyfin's own install defaults, tried when the user didn't specify a port themselves.
+private const val JELLYFIN_DEFAULT_HTTPS_PORT = 8920
+private const val JELLYFIN_DEFAULT_HTTP_PORT = 8096
+
+/**
+ * Expands a bare address like "tv.example.com" into the candidate URLs worth probing, in the
+ * order to try them. A scheme makes the address specific — it's used as-is. Without one, an
+ * explicit port still narrows it to that port on both schemes; with neither, Jellyfin's own
+ * default ports are tried before falling back to the scheme's own default port.
+ */
+internal fun candidateServerUrls(input: String): List<String> {
+    val trimmed = input.trim().trimEnd('/')
+    if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+        return listOf(trimmed)
+    }
+    return if (Regex(""":\d+$""").containsMatchIn(trimmed)) {
+        listOf("https://$trimmed", "http://$trimmed")
+    } else {
+        listOf(
+            "https://$trimmed:$JELLYFIN_DEFAULT_HTTPS_PORT",
+            "http://$trimmed:$JELLYFIN_DEFAULT_HTTP_PORT",
+            "https://$trimmed",
+            "http://$trimmed"
+        )
     }
 }
 

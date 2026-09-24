@@ -2,11 +2,17 @@ package app.tellyfin.androidtv
 
 import android.app.Application
 import app.tellyfin.androidtv.data.api.ServerAuth
+import app.tellyfin.androidtv.diagnostics.CrashReporting
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import okhttp3.OkHttpClient
 
 class TellyfinApp : Application(), ImageLoaderFactory {
+
+    override fun onCreate() {
+        super.onCreate()
+        CrashReporting.init(this)
+    }
 
     /**
      * App-wide Coil loader that authenticates against the Jellyfin server with
