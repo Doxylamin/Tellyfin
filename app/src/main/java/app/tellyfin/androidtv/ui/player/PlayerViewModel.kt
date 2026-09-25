@@ -605,19 +605,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     true
                 }
-                // Only ever step between programmes the guide actually draws — ones that ended
-                // before its window, or hidden duplicates, would take focus somewhere invisible.
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    val programs = state.highlightedChannel
-                        ?.let { state.epgData[it.id.toString()] }.orEmpty()
-                    val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
-                    _uiState.value = state.copy(
-                        epgFocusedBlockIndex = guideStepFocus(
-                            programs, guideWindowStart(java.time.Instant.now()), state.epgFocusedBlockIndex, delta
-                        )
-                    )
-                    true
-                }
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> { stepGuideFocus(keyCode, state); true }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                     startPlaying(state.highlightedIndex); true
                 }
@@ -804,14 +792,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun handleEpgKeys(keyCode: Int, state: PlayerUiState): Boolean {
         return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                val n = (state.highlightedIndex - 1 + state.channels.size) % state.channels.size
-                _uiState.value = state.copy(highlightedIndex = n); true
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                val step = if (keyCode == KeyEvent.KEYCODE_DPAD_UP) -1 else 1
+                val n = (state.highlightedIndex + step + state.channels.size) % state.channels.size
+                // A new row starts on what's on now, like the home screen's guide.
+                val focus = state.channels.getOrNull(n)?.let { currentProgramIndex(it.id, state.epgData) } ?: 0
+                _uiState.value = state.copy(highlightedIndex = n, epgFocusedBlockIndex = focus); true
             }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                val n = (state.highlightedIndex + 1) % state.channels.size
-                _uiState.value = state.copy(highlightedIndex = n); true
-            }
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> { stepGuideFocus(keyCode, state); true }
+            // OK switches to the channel whichever programme is focused — it's live TV.
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 selectChannel(state.highlightedIndex); true
             }
@@ -1196,9 +1185,25 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun openEpg() {
-        _uiState.value = _uiState.value.copy(
+        val state = _uiState.value
+        _uiState.value = state.copy(
             overlay = Overlay.Epg,
-            highlightedIndex = _uiState.value.currentIndex
+            highlightedIndex = state.currentIndex,
+            epgFocusedBlockIndex = state.currentChannel?.let { currentProgramIndex(it.id, state.epgData) } ?: 0
+        )
+    }
+
+    /**
+     * Left/Right in either guide. Only ever steps between programmes the guide actually draws —
+     * ones that ended before its window, or hidden duplicates, would take focus somewhere invisible.
+     */
+    private fun stepGuideFocus(keyCode: Int, state: PlayerUiState) {
+        val programs = state.highlightedChannel?.let { state.epgData[it.id.toString()] }.orEmpty()
+        val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+        _uiState.value = state.copy(
+            epgFocusedBlockIndex = guideStepFocus(
+                programs, guideWindowStart(java.time.Instant.now()), state.epgFocusedBlockIndex, delta
+            )
         )
     }
 

@@ -60,6 +60,7 @@ fun EpgOverlay(
     epgData: Map<String, List<Program>>,
     currentChannelIndex: Int,
     highlightedRow: Int,
+    focusedBlockIndex: Int,
     visible: Boolean,
     showVideoSlot: Boolean,
     onVideoSlotChanged: (Rect?) -> Unit,
@@ -74,7 +75,7 @@ fun EpgOverlay(
     }
 
     val highlightedChannel = channels.getOrNull(highlightedRow)
-    val heroProgram = highlightedChannel?.let { guideHeroProgram(epgData[it.id.toString()].orEmpty(), null, now) }
+    val heroProgram = highlightedChannel?.let { guideHeroProgram(epgData[it.id.toString()].orEmpty(), focusedBlockIndex, now) }
     var slot by remember { mutableStateOf<Rect?>(null) }
 
     // Fades rather than slides: the slot must not move while the video is sized into it.
@@ -142,6 +143,7 @@ fun EpgOverlay(
                 highlightedChannelId = highlightedChannel?.id,
                 isFocused = true,
                 modifier = Modifier.weight(1f),
+                focusedBlockIndex = focusedBlockIndex,
                 currentChannelId = channels.getOrNull(currentChannelIndex)?.id
             )
             GuideHintBar(stringResource(R.string.epg_hint))

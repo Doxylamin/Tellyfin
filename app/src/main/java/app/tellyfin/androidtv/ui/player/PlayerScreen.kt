@@ -220,6 +220,7 @@ fun PlayerScreen(
             epgData = state.epgData,
             currentChannelIndex = state.currentIndex,
             highlightedRow = state.highlightedIndex,
+            focusedBlockIndex = state.epgFocusedBlockIndex,
             visible = state.overlay is Overlay.Epg,
             showVideoSlot = state.isPlaying,
             onVideoSlotChanged = { videoSlot = it }

@@ -68,7 +68,7 @@
     <string name="quick_menu_hint">↑↓ Navigate  ·  OK Select  ·  ← Close</string>
 
     <!-- EPG overlay -->
-    <string name="epg_hint">↑↓ Channels  ·  OK Watch  ·  BACK Close</string>
+    <string name="epg_hint">↑↓ Channels  ·  ← → Programmes  ·  OK Watch  ·  BACK Close</string>
     <string name="no_data">No data</string>
 
     <!-- Settings screen -->
