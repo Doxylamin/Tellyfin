@@ -10,8 +10,6 @@
 
     <!-- Home screen EPG hero -->
     <string name="epg_title">Programmführer</string>
-    <string name="epg_ok_hint">OK: Kanal wechseln</string>
-    <string name="epg_on_now">Jetzt</string>
     <string name="guide_remaining">noch %d min</string>
     <string name="guide_starts_in">in %d min</string>
     <string name="guide_ended">vorbei</string>
