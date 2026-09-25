@@ -9,21 +9,32 @@ import io.sentry.android.core.SentryAndroid
 /** The `sentry` flavor's implementation — the only place io.sentry.* is referenced. */
 object CrashReporting {
 
+    private val verbose = BuildConfig.DEBUG || BuildConfig.PRERELEASE
+
     fun init(application: Application) {
         SentryAndroid.init(application) { options ->
             options.dsn = BuildConfig.SENTRY_DSN
-            options.environment = if (BuildConfig.DEBUG) "debug" else "release"
+            options.environment = when {
+                BuildConfig.DEBUG -> "debug"
+                BuildConfig.PRERELEASE -> "beta"
+                else -> "release"
+            }
             options.release = "tellyfin@${BuildConfig.VERSION_NAME}"
             // Logs stream to the dashboard continuously, independent of any captured event —
             // fine for debug/beta diagnosis, too verbose (and too much real-user telemetry) to
             // leave on for every routine action in a release build.
-            options.logs.isEnabled = BuildConfig.DEBUG
+            options.logs.isEnabled = verbose
         }
     }
 
     fun addBreadcrumb(message: String, category: String) {
         Sentry.addBreadcrumb(message, category)
         Sentry.logger().info(message)
+    }
+
+    /** Streams a diagnostic log line to Sentry — debug/beta builds only, a no-op in releases. */
+    fun log(message: String) {
+        if (verbose) Sentry.logger().info(message)
     }
 
     /** Always active, in every build — a real exception is exactly what production reporting
@@ -35,7 +46,7 @@ object CrashReporting {
      *  shouldn't get one of these from every user who happens to hit a slow network; it should
      *  only ever report actual stack traces via captureException above. */
     fun captureMessage(message: String, level: ReportLevel) {
-        if (!BuildConfig.DEBUG) return
+        if (!verbose) return
         Sentry.captureMessage(message, level.toSentryLevel())
         Sentry.logger().log(level.toSentryLogLevel(), message)
     }

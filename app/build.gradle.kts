@@ -37,6 +37,9 @@ android {
         versionName = ciVersionName
         buildConfigField("String", "VERSION_NAME", "\"$ciVersionName\"")
         buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
+        // Pre-release versions (e.g. 2.0.0-beta.2) are internal test builds: they get the same
+        // verbose diagnostics as debug builds, since that's the only way to see them on a TV.
+        buildConfigField("boolean", "PRERELEASE", "${ciVersionName.contains('-')}")
     }
 
     buildFeatures {

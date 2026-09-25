@@ -12,6 +12,8 @@ object CrashReporting {
 
     fun addBreadcrumb(message: String, category: String) {}
 
+    fun log(message: String) {}
+
     fun captureException(throwable: Throwable): String? = null
 
     fun captureMessage(message: String, level: ReportLevel) {}
