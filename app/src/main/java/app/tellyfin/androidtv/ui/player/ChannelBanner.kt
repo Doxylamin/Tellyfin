@@ -1,7 +1,12 @@
 package app.tellyfin.androidtv.ui.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -27,6 +32,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +65,8 @@ fun ChannelBanner(
     visible: Boolean,
     isPreview: Boolean = false,
     countdownMs: Long = Prebuffer.countdownMs(enabled = false),
+    preloadLoading: Boolean = false,
+    preloadReady: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -179,6 +187,8 @@ fun ChannelBanner(
                     CountdownArc(
                         durationMs = countdownMs.toInt(),
                         channelKey = channel.id,
+                        loading = preloadLoading,
+                        ready = preloadReady,
                         modifier = Modifier.size(56.dp)
                     )
                 }
@@ -191,6 +201,8 @@ fun ChannelBanner(
 private fun CountdownArc(
     durationMs: Int,
     channelKey: Any,
+    loading: Boolean,
+    ready: Boolean,
     modifier: Modifier = Modifier
 ) {
     val sweep = remember(channelKey) { Animatable(1f) }
@@ -203,7 +215,16 @@ private fun CountdownArc(
     }
 
     val secondsLeft = ceil(sweep.value * (durationMs / 1000f)).toInt().coerceIn(0, durationMs / 1000)
-    val purple = AppColors.Purple
+    // Pre-buffering feedback: the ring pulses with a glow while the next channel loads, and
+    // turns green once enough is buffered that switching now starts instantly.
+    val arcColor by animateColorAsState(if (ready) AppColors.Green else AppColors.Purple, label = "arcColor")
+    val pulse by rememberInfiniteTransition(label = "preloadPulse").animateFloat(
+        initialValue = 1f,
+        targetValue = 0.5f,
+        animationSpec = infiniteRepeatable(tween(550), RepeatMode.Reverse),
+        label = "pulse"
+    )
+    val arcAlpha = if (loading) pulse else 1f
     val trackColor = Color.White.copy(alpha = 0.15f)
     val bgColor = Color.Black.copy(alpha = 0.5f)
 
@@ -228,10 +249,21 @@ private fun CountdownArc(
                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
             )
 
-            // Countdown arc
+            // Countdown arc, with a soft glow underneath while loading
             if (sweep.value > 0f) {
+                if (loading) {
+                    drawArc(
+                        color = arcColor.copy(alpha = 0.35f * (1.5f - arcAlpha)),
+                        startAngle = -90f,
+                        sweepAngle = 360f * sweep.value,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeWidth * 2.5f, cap = StrokeCap.Round)
+                    )
+                }
                 drawArc(
-                    color = purple,
+                    color = arcColor.copy(alpha = arcAlpha),
                     startAngle = -90f,
                     sweepAngle = 360f * sweep.value,
                     useCenter = false,

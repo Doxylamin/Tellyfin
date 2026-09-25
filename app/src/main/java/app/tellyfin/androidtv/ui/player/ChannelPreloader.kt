@@ -38,7 +38,9 @@ class ChannelPreloader(
     private val player: ExoPlayer,
     private val allocator: Allocator,
     private val dataSourceFactory: DataSource.Factory,
-    private val onPreloadFailed: (UUID) -> Unit
+    private val onPreloadFailed: (UUID) -> Unit,
+    /** Enough is buffered that switching to this channel now starts instantly. */
+    private val onPreloadReady: (UUID) -> Unit
 ) {
     private class Preload(
         val channelId: UUID,
@@ -50,6 +52,9 @@ class ChannelPreloader(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var pending: Preload? = null
+    // Bumped per start(); a callback posted for an older preload (cancelled, replaced — even by
+    // a new preload of the same channel) sees a different value and is dropped.
+    private var generation = 0
 
     // A preloaded source keeps its child source alive even after the player drops it, so
     // it has to be released explicitly once the player has moved on to something else.
@@ -57,7 +62,10 @@ class ChannelPreloader(
 
     fun start(channelId: UUID, maxBitrate: Int?, url: String) {
         cancel()
-        val progress = BufferCap(channelId)
+        val startedGeneration = ++generation
+        val progress = BufferCap(channelId) {
+            mainHandler.post { if (generation == startedGeneration && pending != null) onPreloadReady(channelId) }
+        }
         val errors = PreloadErrorPolicy { error ->
             diag("preload $channelId failed at +${progress.elapsedMs()}ms: $error")
             mainHandler.post { onPreloadFailed(channelId) }
@@ -124,7 +132,11 @@ class ChannelPreloader(
      * Stop once enough is buffered for an instant start; no need to hold two full live streams.
      * Also records how far the preload got, for the diagnostic log. Called on the playback thread.
      */
-    private class BufferCap(private val channelId: UUID) : PreloadMediaSource.PreloadControl {
+    private class BufferCap(
+        private val channelId: UUID,
+        private val onTargetReached: () -> Unit
+    ) : PreloadMediaSource.PreloadControl {
+        @Volatile private var reached = false
         private val startedAt = SystemClock.elapsedRealtime()
         @Volatile private var preparedAtMs = -1L
         @Volatile private var bufferedUs = 0L
@@ -146,7 +158,11 @@ class ChannelPreloader(
         override fun onContinueLoadingRequested(source: PreloadMediaSource, bufferedPositionUs: Long): Boolean {
             bufferedUs = bufferedPositionUs
             val keepGoing = bufferedPositionUs < TARGET_BUFFER_US
-            if (!keepGoing) diag("preload $channelId reached ${bufferedPositionUs / 1000}ms at +${elapsedMs()}ms")
+            if (!keepGoing && !reached) {
+                reached = true
+                diag("preload $channelId reached ${bufferedPositionUs / 1000}ms at +${elapsedMs()}ms")
+                onTargetReached()
+            }
             return keepGoing
         }
     }

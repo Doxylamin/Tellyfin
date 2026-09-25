@@ -121,6 +121,8 @@ fun PlayerScreen(
                         visible = isBannerVisible,
                         isPreview = isPreview,
                         countdownMs = Prebuffer.countdownMs(state.prebufferEnabled, state.countdownSettingMs),
+                        preloadLoading = state.preloadStatus == PreloadStatus.Loading(channel.id),
+                        preloadReady = state.preloadStatus == PreloadStatus.Ready(channel.id),
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }

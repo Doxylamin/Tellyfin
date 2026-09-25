@@ -101,6 +101,8 @@ data class PlayerUiState(
     val diagnosticsEnabled: Boolean = false,
     val keybinds: Keybinds = Keybinds(),
     val settings: SettingsState = SettingsState(),
+    /** Drives the preview banner's countdown ring: pulsing while loading, green when ready. */
+    val preloadStatus: PreloadStatus = PreloadStatus.None,
     val homeFocusSection: Int = HOME_SECTION_EPG,
     val homeNavTabIndex: Int = NAV_LIVE,
     val nowPlayingCardIndex: Int = 0,
@@ -242,7 +244,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         player = exoPlayer,
         allocator = loadControl.allocator,
         dataSourceFactory = httpDataSourceFactory,
-        onPreloadFailed = prebufferFailures::onPreloadFailed
+        onPreloadFailed = { channelId ->
+            prebufferFailures.onPreloadFailed(channelId)
+            onPreloadEvent(PreloadEvent.Failed(channelId))
+        },
+        onPreloadReady = { channelId -> onPreloadEvent(PreloadEvent.Ready(channelId)) }
     )
 
     init {
@@ -1164,6 +1170,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             delay(state.prebufferDelayMs)
             val maxBitrate = _uiState.value.maxBitrate
             preloader.start(channel.id, maxBitrate, jellyfinRepo.getStreamUrl(channel.id, userId, maxBitrate))
+            onPreloadEvent(PreloadEvent.Started(channel.id))
         }
     }
 
@@ -1171,6 +1178,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         preloadStartJob?.cancel()
         preloadStartJob = null
         preloader.cancel()
+        onPreloadEvent(PreloadEvent.Cleared)
+    }
+
+    private fun onPreloadEvent(event: PreloadEvent) {
+        val state = _uiState.value
+        val status = state.preloadStatus.after(event)
+        if (status != state.preloadStatus) _uiState.value = state.copy(preloadStatus = status)
     }
 
     private fun confirmChannelSwitch() {

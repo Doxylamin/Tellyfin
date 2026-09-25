@@ -67,3 +67,34 @@ class PrebufferFailureTracker {
         switchedToFailedPreload = false
     }
 }
+
+/** What the preview banner's countdown ring shows about the next channel's preload. */
+sealed interface PreloadStatus {
+    data object None : PreloadStatus
+    data class Loading(val channelId: UUID) : PreloadStatus
+    data class Ready(val channelId: UUID) : PreloadStatus
+
+    /**
+     * Preload callbacks arrive asynchronously, so an event only applies to the preload it's
+     * about — a late "ready" for one that was already cancelled or replaced is ignored.
+     */
+    fun after(event: PreloadEvent): PreloadStatus = when (event) {
+        is PreloadEvent.Started -> Loading(event.channelId)
+        is PreloadEvent.Ready -> if (this == Loading(event.channelId)) Ready(event.channelId) else this
+        is PreloadEvent.Failed -> if (channelIdOrNull() == event.channelId) None else this
+        PreloadEvent.Cleared -> None
+    }
+
+    private fun channelIdOrNull(): UUID? = when (this) {
+        None -> null
+        is Loading -> channelId
+        is Ready -> channelId
+    }
+}
+
+sealed interface PreloadEvent {
+    data class Started(val channelId: UUID) : PreloadEvent
+    data class Ready(val channelId: UUID) : PreloadEvent
+    data class Failed(val channelId: UUID) : PreloadEvent
+    data object Cleared : PreloadEvent
+}
