@@ -3,18 +3,33 @@ package app.tellyfin.androidtv.ui.player
 import android.view.KeyEvent
 
 /**
- * Remote actions that can take one extra, user-chosen button on top of their standard one
- * (for remotes that lack a button or send an unusual keycode). Declaration order is the order
- * Settings lists them in.
+ * App-internal "open the quick menu" signal. No remote button sends it: holding OK does, and so
+ * does a button the user added for Quick menu. Negative so it can never collide with a real
+ * keycode. Outside playback it means MENU (see [routeQuickMenu]).
  */
-enum class KeyAction(val defaultKeyCode: Int) {
-    QUICK_MENU(KeyEvent.KEYCODE_MENU),
-    CHANNEL_INFO(KeyEvent.KEYCODE_INFO),
-    LIVE_GUIDE(KeyEvent.KEYCODE_GUIDE),
-    SEARCH(KeyEvent.KEYCODE_SEARCH),
-    CHANNEL_UP(KeyEvent.KEYCODE_CHANNEL_UP),
-    CHANNEL_DOWN(KeyEvent.KEYCODE_CHANNEL_DOWN)
+const val KEYCODE_QUICK_MENU = -1001
+
+/**
+ * Remote actions that can take one extra, user-chosen button on top of their standard ones
+ * (for remotes that lack a button or send an unusual keycode). [keyCode] is what an added button
+ * stands in for; [defaultKeyCodes] are the remote buttons that already do it. Declaration order
+ * is the order Settings lists them in.
+ */
+enum class KeyAction(val keyCode: Int, val defaultKeyCodes: List<Int>) {
+    QUICK_MENU(KEYCODE_QUICK_MENU, emptyList()),
+    CHANNEL_INFO(KeyEvent.KEYCODE_INFO, listOf(KeyEvent.KEYCODE_INFO)),
+    LIVE_GUIDE(KeyEvent.KEYCODE_GUIDE, listOf(KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_MENU)),
+    SEARCH(KeyEvent.KEYCODE_SEARCH, listOf(KeyEvent.KEYCODE_SEARCH)),
+    CHANNEL_UP(KeyEvent.KEYCODE_CHANNEL_UP, listOf(KeyEvent.KEYCODE_CHANNEL_UP)),
+    CHANNEL_DOWN(KeyEvent.KEYCODE_CHANNEL_DOWN, listOf(KeyEvent.KEYCODE_CHANNEL_DOWN))
 }
+
+/**
+ * The quick menu only exists while watching. Everywhere else, holding OK (or a Quick-menu button)
+ * keeps doing what it always did there: stand in for MENU on remotes that don't have one.
+ */
+fun routeQuickMenu(keyCode: Int, inPlayer: Boolean): Int =
+    if (keyCode == KEYCODE_QUICK_MENU && !inPlayer) KeyEvent.KEYCODE_MENU else keyCode
 
 sealed interface CaptureResult {
     data object Accepted : CaptureResult
@@ -29,6 +44,7 @@ sealed interface CaptureResult {
  */
 val RESERVED_KEYS: Set<Int> = setOf(
     KeyEvent.KEYCODE_UNKNOWN,
+    KEYCODE_QUICK_MENU,  // holding OK while the capture dialog waits
     KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
     KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
     KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BACK,
@@ -40,11 +56,11 @@ data class Keybinds(val extras: Map<KeyAction, Int> = emptyMap()) {
 
     /** A user-added button becomes its action's standard keycode; anything else passes through. */
     fun resolve(keyCode: Int): Int =
-        extras.entries.firstOrNull { it.value == keyCode }?.key?.defaultKeyCode ?: keyCode
+        extras.entries.firstOrNull { it.value == keyCode }?.key?.keyCode ?: keyCode
 
     fun validate(action: KeyAction, keyCode: Int): CaptureResult {
         if (keyCode in RESERVED_KEYS) return CaptureResult.Reserved
-        val owner = KeyAction.entries.firstOrNull { it.defaultKeyCode == keyCode }
+        val owner = KeyAction.entries.firstOrNull { keyCode in it.defaultKeyCodes }
             ?: extras.entries.firstOrNull { it.value == keyCode && it.key != action }?.key
         return if (owner != null) CaptureResult.Conflict(owner) else CaptureResult.Accepted
     }

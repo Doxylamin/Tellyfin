@@ -45,11 +45,29 @@ class KeybindsTest {
     }
 
     @Test
-    fun `the long-press MENU is refused as belonging to Quick menu`() {
+    fun `MENU belongs to the guide now`() {
         assertEquals(
-            CaptureResult.Conflict(KeyAction.QUICK_MENU),
+            CaptureResult.Conflict(KeyAction.LIVE_GUIDE),
             Keybinds().validate(KeyAction.SEARCH, KeyEvent.KEYCODE_MENU)
         )
+    }
+
+    @Test
+    fun `holding OK while capturing is refused rather than bound`() {
+        assertEquals(CaptureResult.Reserved, Keybinds().validate(KeyAction.SEARCH, KEYCODE_QUICK_MENU))
+    }
+
+    @Test
+    fun `an added quick-menu button opens the quick menu, not MENU`() {
+        val keybinds = Keybinds().withExtra(KeyAction.QUICK_MENU, red)
+        assertEquals(KEYCODE_QUICK_MENU, keybinds.resolve(red))
+    }
+
+    @Test
+    fun `outside playback the quick-menu signal acts like MENU`() {
+        assertEquals(KeyEvent.KEYCODE_MENU, routeQuickMenu(KEYCODE_QUICK_MENU, inPlayer = false))
+        assertEquals(KEYCODE_QUICK_MENU, routeQuickMenu(KEYCODE_QUICK_MENU, inPlayer = true))
+        assertEquals(KeyEvent.KEYCODE_GUIDE, routeQuickMenu(KeyEvent.KEYCODE_GUIDE, inPlayer = false))
     }
 
     @Test

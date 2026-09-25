@@ -248,9 +248,11 @@ private fun InfoLine(label: String, value: String) {
 @Composable
 fun KeyChips(action: KeyAction, keybinds: Keybinds) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        KeyChip(keyLabel(action.defaultKeyCode))
+        action.defaultKeyCodes.forEach { KeyChip(keyLabel(it)) }
+        // Built-in ways that aren't a single button of their own (all while watching).
         when (action) {
             KeyAction.QUICK_MENU -> KeyChip(stringResource(R.string.keybind_hold_ok))
+            KeyAction.LIVE_GUIDE -> KeyChip("▶")
             KeyAction.CHANNEL_UP -> KeyChip("▲")
             KeyAction.CHANNEL_DOWN -> KeyChip("▼")
             else -> Unit

@@ -438,7 +438,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             return handleSettingsKeys(rawKeyCode, state)
         }
         if (keyRepeatGuard.shouldSwallow(rawKeyCode)) return true
-        val keyCode = state.keybinds.resolve(rawKeyCode)
+        // Holding OK / a Quick-menu button: the quick menu while watching, MENU anywhere else.
+        val inPlayer = state.isPlaying && (state.overlay is Overlay.None || state.overlay is Overlay.ChannelBanner)
+        val keyCode = routeQuickMenu(state.keybinds.resolve(rawKeyCode), inPlayer)
 
         if (keyCode == KeyEvent.KEYCODE_BACK) return handleBack(state)
 
@@ -745,8 +747,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 else { openNowPlaying(); true }
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> { openChannelList(); true }
-            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_GUIDE -> { openEpg(); true }
-            KeyEvent.KEYCODE_MENU -> { openQuickMenu(); true }
+            // MENU opens the guide while watching; the quick menu moved to holding OK.
+            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_MENU -> { openEpg(); true }
+            KEYCODE_QUICK_MENU -> { openQuickMenu(); true }
             KeyEvent.KEYCODE_INFO -> { showChannelBanner(); true }
             // Same countdown-preview behavior as D-pad UP/DOWN — instant switching here
             // used to feel inconsistent with every other zap path, and the preview window

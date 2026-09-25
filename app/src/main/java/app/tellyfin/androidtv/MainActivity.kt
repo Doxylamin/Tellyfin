@@ -1,5 +1,6 @@
 package app.tellyfin.androidtv
 
+import app.tellyfin.androidtv.ui.player.KEYCODE_QUICK_MENU
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -96,7 +97,8 @@ class MainActivity : ComponentActivity() {
         val isConfirm = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
                         event.keyCode == KeyEvent.KEYCODE_ENTER
 
-        // Intercept OK/Enter to distinguish tap (normal action) from hold (MENU equivalent)
+        // Intercept OK/Enter to distinguish tap (normal action) from hold (quick menu while watching,
+        // MENU everywhere else — see routeQuickMenu)
         if (isLoggedIn && isConfirm) {
             return when (event.action) {
                 KeyEvent.ACTION_DOWN -> {
@@ -105,7 +107,7 @@ class MainActivity : ComponentActivity() {
                         longPressRunnable?.let { longPressHandler.removeCallbacks(it) }
                         longPressRunnable = Runnable {
                             confirmLongPressed = true
-                            playerViewModel.handleKeyEvent(KeyEvent.KEYCODE_MENU)
+                            playerViewModel.handleKeyEvent(KEYCODE_QUICK_MENU)
                         }.also {
                             longPressHandler.postDelayed(
                                 it, ViewConfiguration.getLongPressTimeout().toLong()
