@@ -3,6 +3,7 @@ package app.tellyfin.androidtv.ui.player
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -215,13 +216,13 @@ private fun CountdownArc(
     }
 
     val secondsLeft = ceil(sweep.value * (durationMs / 1000f)).toInt().coerceIn(0, durationMs / 1000)
-    // Pre-buffering feedback: the ring pulses with a glow while the next channel loads, and
+    // Pre-buffering feedback: the ring fades in and out while the next channel loads, and
     // turns green once enough is buffered that switching now starts instantly.
     val arcColor by animateColorAsState(if (ready) AppColors.Green else AppColors.Purple, label = "arcColor")
     val pulse by rememberInfiniteTransition(label = "preloadPulse").animateFloat(
         initialValue = 1f,
-        targetValue = 0.5f,
-        animationSpec = infiniteRepeatable(tween(550), RepeatMode.Reverse),
+        targetValue = 0.25f,
+        animationSpec = infiniteRepeatable(tween(650, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "pulse"
     )
     val arcAlpha = if (loading) pulse else 1f
@@ -249,19 +250,8 @@ private fun CountdownArc(
                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
             )
 
-            // Countdown arc, with a soft glow underneath while loading
+            // Countdown arc
             if (sweep.value > 0f) {
-                if (loading) {
-                    drawArc(
-                        color = arcColor.copy(alpha = 0.35f * (1.5f - arcAlpha)),
-                        startAngle = -90f,
-                        sweepAngle = 360f * sweep.value,
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = Stroke(width = strokeWidth * 2.5f, cap = StrokeCap.Round)
-                    )
-                }
                 drawArc(
                     color = arcColor.copy(alpha = arcAlpha),
                     startAngle = -90f,
