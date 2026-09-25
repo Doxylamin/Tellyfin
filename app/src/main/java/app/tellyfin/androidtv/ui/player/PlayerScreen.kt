@@ -67,6 +67,8 @@ fun PlayerScreen(
                     serverUrl = viewModel.jellyfinRepo.baseUrl,
                     username = state.username,
                     currentBitrate = state.maxBitrate,
+                    prebufferEnabled = state.prebufferEnabled,
+                    prebufferAutoDisabled = state.prebufferAutoDisabled,
                     highlightedIndex = state.highlightedMenuIndex,
                     updateStatus = state.updateStatus,
                     appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.FLAVOR})",
@@ -124,6 +126,7 @@ fun PlayerScreen(
                         channel = channel,
                         visible = isBannerVisible,
                         isPreview = isPreview,
+                        countdownMs = Prebuffer.countdownMs(state.prebufferEnabled),
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }

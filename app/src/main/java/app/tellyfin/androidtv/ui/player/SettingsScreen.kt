@@ -20,8 +20,8 @@ import androidx.compose.ui.unit.sp
 import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.ui.theme.AppColors
 
-// Focus map (highlightedIndex): SETTINGS_FOCUS_BANDWIDTH = Streaming card,
-// SETTINGS_FOCUS_UPDATE = App card, SETTINGS_FOCUS_LOGOUT = Account card.
+// Focus map (highlightedIndex): SETTINGS_FOCUS_BANDWIDTH / SETTINGS_FOCUS_PREBUFFER = Streaming
+// card, SETTINGS_FOCUS_UPDATE = App card, SETTINGS_FOCUS_LOGOUT = Account card.
 // Key handling lives in PlayerViewModel.handleSettingsKeys.
 
 @Composable
@@ -29,6 +29,8 @@ fun SettingsScreen(
     serverUrl: String,
     username: String,
     currentBitrate: Int?,
+    prebufferEnabled: Boolean,
+    prebufferAutoDisabled: Boolean,
     highlightedIndex: Int,
     updateStatus: UpdateStatus = UpdateStatus.Idle,
     appVersion: String = "",
@@ -75,7 +77,8 @@ fun SettingsScreen(
             ) {
                 SettingsCard(
                     title = stringResource(R.string.settings_section_streaming),
-                    isActive = highlightedIndex == SETTINGS_FOCUS_BANDWIDTH,
+                    isActive = highlightedIndex == SETTINGS_FOCUS_BANDWIDTH ||
+                        highlightedIndex == SETTINGS_FOCUS_PREBUFFER,
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 ) {
                     ActionRow(
@@ -108,6 +111,30 @@ fun SettingsScreen(
                     Text(
                         stringResource(R.string.settings_bandwidth_hint),
                         color = AppColors.OnSurface.copy(alpha = 0.35f),
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    ActionRow(
+                        label = stringResource(R.string.settings_prebuffer),
+                        isFocused = highlightedIndex == SETTINGS_FOCUS_PREBUFFER
+                    ) {
+                        Text(
+                            stringResource(if (prebufferEnabled) R.string.settings_on else R.string.settings_off),
+                            color = if (highlightedIndex == SETTINGS_FOCUS_PREBUFFER) AppColors.Purple
+                            else AppColors.OnSurface.copy(alpha = 0.80f),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(
+                            if (prebufferAutoDisabled) R.string.settings_prebuffer_auto_off_hint
+                            else R.string.settings_prebuffer_hint
+                        ),
+                        color = if (prebufferAutoDisabled) AppColors.Red.copy(alpha = 0.70f)
+                        else AppColors.OnSurface.copy(alpha = 0.35f),
                         fontSize = 11.sp,
                         lineHeight = 15.sp
                     )

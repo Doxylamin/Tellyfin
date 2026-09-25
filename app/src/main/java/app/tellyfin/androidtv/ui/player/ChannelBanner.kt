@@ -58,6 +58,7 @@ fun ChannelBanner(
     channel: Channel,
     visible: Boolean,
     isPreview: Boolean = false,
+    countdownMs: Long = Prebuffer.countdownMs(enabled = false),
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -176,7 +177,7 @@ fun ChannelBanner(
                 if (isPreview) {
                     Spacer(Modifier.width(28.dp))
                     CountdownArc(
-                        durationMs = 3000,
+                        durationMs = countdownMs.toInt(),
                         channelKey = channel.id,
                         modifier = Modifier.size(56.dp)
                     )

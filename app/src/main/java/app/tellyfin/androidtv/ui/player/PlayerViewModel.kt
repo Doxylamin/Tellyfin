@@ -4,15 +4,19 @@ import android.app.Application
 import android.view.KeyEvent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.os.SystemClock
+import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.preload.PreloadMediaSource
 import app.tellyfin.androidtv.BuildConfig
 import app.tellyfin.androidtv.data.UpdateChecker
 import app.tellyfin.androidtv.data.api.JellyfinRepository
@@ -31,7 +35,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
@@ -74,6 +80,7 @@ const val NAV_SETTINGS = 3
 const val SETTINGS_FOCUS_BANDWIDTH = 0  // Streaming card, top-left
 const val SETTINGS_FOCUS_UPDATE    = 1  // App card, top-right
 const val SETTINGS_FOCUS_LOGOUT    = 2  // Account card, bottom
+const val SETTINGS_FOCUS_PREBUFFER = 3  // Streaming card, below bandwidth
 
 data class PlayerUiState(
     val isLoadingChannels: Boolean = true,
@@ -90,6 +97,9 @@ data class PlayerUiState(
     val favoriteChannelIds: Set<UUID> = emptySet(),
     val highlightedMenuIndex: Int = 0,
     val maxBitrate: Int? = null,
+    val prebufferEnabled: Boolean = true,
+    /** Set when the app turned pre-buffering off itself, so Settings can explain why. */
+    val prebufferAutoDisabled: Boolean = false,
     val homeFocusSection: Int = HOME_SECTION_EPG,
     val homeNavTabIndex: Int = NAV_LIVE,
     val nowPlayingCardIndex: Int = 0,
@@ -161,19 +171,19 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val httpDataSourceFactory = DefaultHttpDataSource.Factory()
         .setUserAgent("Tellyfin")
 
+    // Live TV: keep start-up buffering short so channel zapping feels instant
+    private val loadControl = DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            /* minBufferMs = */ 15_000,
+            /* maxBufferMs = */ 50_000,
+            /* bufferForPlaybackMs = */ 1_500,
+            /* bufferForPlaybackAfterRebufferMs = */ 3_000
+        )
+        .build()
+
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(application)
         .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))
-        // Live TV: keep start-up buffering short so channel zapping feels instant
-        .setLoadControl(
-            DefaultLoadControl.Builder()
-                .setBufferDurationsMs(
-                    /* minBufferMs = */ 15_000,
-                    /* maxBufferMs = */ 50_000,
-                    /* bufferForPlaybackMs = */ 1_500,
-                    /* bufferForPlaybackAfterRebufferMs = */ 3_000
-                )
-                .build()
-        )
+        .setLoadControl(loadControl)
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
@@ -185,7 +195,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         .also { player ->
             player.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_READY) streamRetryCount = 0
+                    if (state == Player.STATE_READY) {
+                        switchStartedAtMs?.let {
+                            diag("switch ready after ${SystemClock.elapsedRealtime() - it}ms " +
+                                "(preloaded=$switchUsedPreload, buffered=${player.totalBufferedDuration}ms)")
+                        }
+                        switchStartedAtMs = null
+                        streamRetryCount = 0
+                        if (prebufferFailures.onPlaybackReady()) disablePrebufferAutomatically()
+                    }
                     _uiState.value = _uiState.value.copy(
                         isBuffering = state == Player.STATE_BUFFERING,
                         error = if (state == Player.STATE_READY) null else _uiState.value.error
@@ -210,6 +228,18 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var streamRetryJob: Job? = null
     private var streamRetryCount = 0
     private var userId: String = ""
+    private var preloadStartJob: Job? = null
+    // Diagnostics only: how long a switch takes to reach STATE_READY, logged under TellyfinPreload.
+    private var switchStartedAtMs: Long? = null
+    private var switchUsedPreload = false
+    private val prebufferFailures = PrebufferFailureTracker()
+    private val preloader = ChannelPreloader(
+        context = application,
+        player = exoPlayer,
+        allocator = loadControl.allocator,
+        dataSourceFactory = httpDataSourceFactory,
+        onPreloadFailed = prebufferFailures::onPreloadFailed
+    )
 
     init {
         breadcrumb("PlayerViewModel constructed")
@@ -246,6 +276,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 breadcrumb("userId read")
                 val lastIndex = prefsRepo.lastChannelIndex.first()
                 val maxBitrate = prefsRepo.maxBitrate.first()
+                val prebufferEnabled = prefsRepo.prebufferEnabled.first()
+                val prebufferAutoDisabled = prefsRepo.prebufferAutoDisabled.first()
                 val favIds = prefsRepo.favoriteIds.first()
                     .mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() }
                     .toSet()
@@ -258,6 +290,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 _uiState.value = _uiState.value.copy(
                     maxBitrate = maxBitrate,
+                    prebufferEnabled = prebufferEnabled,
+                    prebufferAutoDisabled = prebufferAutoDisabled,
                     favoriteChannelIds = favIds,
                     username = username,
                     loadingStatus = "Loading channels…"
@@ -269,6 +303,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
         promptForUpdateIfAvailable()
         loadBranding()
+        // A preload only makes sense while its preview banner is up. Confirming takes it
+        // before the banner closes; any other way the banner goes away (Back, opening
+        // another overlay) leaves it stale, so free the server-side stream right away.
+        viewModelScope.launch {
+            _uiState.map { it.overlay is Overlay.ChannelBanner }
+                .distinctUntilChanged()
+                .collect { bannerUp -> if (!bannerUp) cancelPreload() }
+        }
     }
 
     /** Timestamped breadcrumb — visible in any event captured during this session, on sentry.io,
@@ -683,8 +725,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_GUIDE -> { openEpg(); true }
             KeyEvent.KEYCODE_MENU -> { openQuickMenu(); true }
             KeyEvent.KEYCODE_INFO -> { showChannelBanner(); true }
-            KeyEvent.KEYCODE_CHANNEL_UP -> { channelUp(); true }
-            KeyEvent.KEYCODE_CHANNEL_DOWN -> { channelDown(); true }
+            // Same countdown-preview behavior as D-pad UP/DOWN — instant switching here
+            // used to feel inconsistent with every other zap path, and the preview window
+            // is what gives the new stream time to pre-buffer ahead of the actual switch.
+            KeyEvent.KEYCODE_CHANNEL_UP -> { previewChannelUp(); true }
+            KeyEvent.KEYCODE_CHANNEL_DOWN -> { previewChannelDown(); true }
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> { onZapDigit(keyCode - KeyEvent.KEYCODE_0); true }
             else -> false
         }
@@ -692,9 +737,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun handleNowPlayingKeys(keyCode: Int, state: PlayerUiState): Boolean {
         return when (keyCode) {
-            // Same countdown-preview behavior as plain playback's D-pad UP/DOWN — instant
-            // switching here (previously channelUp()/channelDown(), meant for the hardware
-            // CHANNEL+/- buttons) felt inconsistent with every other D-pad zap path.
+            // Same countdown-preview behavior as every other zap path, D-pad or hardware
+            // CHANNEL+/-.
             KeyEvent.KEYCODE_DPAD_UP -> { previewChannelUp(); true }
             KeyEvent.KEYCODE_DPAD_DOWN -> { previewChannelDown(); true }
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
@@ -805,8 +849,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 else -> false
             }
         }
-        // Card grid: SETTINGS_FOCUS_BANDWIDTH (top-left), SETTINGS_FOCUS_UPDATE (top-right),
-        // SETTINGS_FOCUS_LOGOUT (bottom row)
+        // Card grid: Streaming card (top-left) holds SETTINGS_FOCUS_BANDWIDTH above
+        // SETTINGS_FOCUS_PREBUFFER, SETTINGS_FOCUS_UPDATE (top-right), SETTINGS_FOCUS_LOGOUT (bottom row)
         fun focus(index: Int) { _uiState.value = state.copy(highlightedMenuIndex = index) }
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
@@ -814,15 +858,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (state.highlightedMenuIndex == SETTINGS_FOCUS_BANDWIDTH) focus(SETTINGS_FOCUS_UPDATE)
+                if (state.highlightedMenuIndex == SETTINGS_FOCUS_BANDWIDTH ||
+                    state.highlightedMenuIndex == SETTINGS_FOCUS_PREBUFFER
+                ) focus(SETTINGS_FOCUS_UPDATE)
                 true
             }
             KeyEvent.KEYCODE_DPAD_UP -> {
-                if (state.highlightedMenuIndex == SETTINGS_FOCUS_LOGOUT) focus(SETTINGS_FOCUS_BANDWIDTH)
+                when (state.highlightedMenuIndex) {
+                    SETTINGS_FOCUS_LOGOUT -> focus(SETTINGS_FOCUS_PREBUFFER)
+                    SETTINGS_FOCUS_PREBUFFER -> focus(SETTINGS_FOCUS_BANDWIDTH)
+                }
                 true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                if (state.highlightedMenuIndex != SETTINGS_FOCUS_LOGOUT) focus(SETTINGS_FOCUS_LOGOUT)
+                when (state.highlightedMenuIndex) {
+                    SETTINGS_FOCUS_BANDWIDTH -> focus(SETTINGS_FOCUS_PREBUFFER)
+                    SETTINGS_FOCUS_PREBUFFER, SETTINGS_FOCUS_UPDATE -> focus(SETTINGS_FOCUS_LOGOUT)
+                }
                 true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
@@ -837,6 +889,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         UpdateStatus.ReadyToInstall -> triggerInstall()
                         else -> Unit
                     }
+                    SETTINGS_FOCUS_PREBUFFER -> setPrebufferEnabled(!state.prebufferEnabled)
                     SETTINGS_FOCUS_LOGOUT -> logOut()
                 }
                 true
@@ -1009,8 +1062,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun switchToChannel(index: Int) {
         bannerDismissJob?.cancel()
+        // Taken before the banner closes: closing it releases any pending preload, and with
+        // Main.immediate that observer can run inline during the state update below.
+        // Switches that skip the banner (EPG, channel list, zap) simply find nothing here.
+        val preloaded = _uiState.value.channels.getOrNull(index)
+            ?.let { preloader.take(it.id, _uiState.value.maxBitrate) }
         _uiState.value = _uiState.value.copy(currentIndex = index, highlightedIndex = index, overlay = Overlay.None)
-        playChannel(index)
+        playChannel(index, preloaded)
     }
 
     /** Transient live-stream hiccups are common; retry quietly before surfacing an error. */
@@ -1028,6 +1086,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 exoPlayer.prepare()
             }
         } else {
+            prebufferFailures.onPlaybackFailed()
             _uiState.value = _uiState.value.copy(
                 isBuffering = false,
                 error = "Stream error: ${error.errorCodeName}"
@@ -1035,16 +1094,22 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun playChannel(index: Int) {
+    @OptIn(UnstableApi::class)
+    private fun playChannel(index: Int, preloaded: PreloadMediaSource? = null) {
         val channel = _uiState.value.channels.getOrNull(index) ?: return
         stopProgressReporting(channel.id)
         streamRetryJob?.cancel()
         streamRetryCount = 0
+        prebufferFailures.onSwitch(channel.id)
+        cancelPreload()
+        switchStartedAtMs = SystemClock.elapsedRealtime()
+        switchUsedPreload = preloaded != null
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isBuffering = true, error = null)
             try {
-                val url = jellyfinRepo.getStreamUrl(channel.id, userId, _uiState.value.maxBitrate)
-                exoPlayer.setMediaItem(MediaItem.fromUri(url))
+                setPlayerSource(preloaded) {
+                    jellyfinRepo.getStreamUrl(channel.id, userId, _uiState.value.maxBitrate)
+                }
                 exoPlayer.prepare()
                 prefsRepo.saveLastChannelIndex(index)
                 jellyfinRepo.reportPlaybackStart(channel.id)
@@ -1055,16 +1120,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun channelUp() {
-        val state = _uiState.value
-        if (state.channels.isEmpty()) return
-        switchToChannel((state.currentIndex - 1 + state.channels.size) % state.channels.size)
-    }
-
-    fun channelDown() {
-        val state = _uiState.value
-        if (state.channels.isEmpty()) return
-        switchToChannel((state.currentIndex + 1) % state.channels.size)
+    @OptIn(UnstableApi::class)
+    private suspend fun setPlayerSource(preloaded: PreloadMediaSource?, streamUrl: suspend () -> String) {
+        if (preloaded != null) exoPlayer.setMediaSource(preloaded)
+        else exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl()))
+        preloader.onPlayerSourceSet(preloaded)
     }
 
     private fun previewChannelUp() {
@@ -1081,11 +1141,28 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun previewChannel(index: Int) {
         bannerDismissJob?.cancel()
+        cancelPreload()
         _uiState.value = _uiState.value.copy(highlightedIndex = index, overlay = Overlay.ChannelBanner)
+        val state = _uiState.value
         bannerDismissJob = viewModelScope.launch {
-            delay(3_000)
+            delay(Prebuffer.countdownMs(state.prebufferEnabled))
             if (_uiState.value.overlay is Overlay.ChannelBanner) confirmChannelSwitch()
         }
+        val channel = state.channels.getOrNull(index) ?: return
+        // Browsing back onto the channel already playing needs no second stream.
+        if (!state.prebufferEnabled || index == state.currentIndex) return
+        preloadStartJob = viewModelScope.launch {
+            // Only once the highlight has rested: flicking past channels never opens a tuner.
+            delay(Prebuffer.START_DELAY_MS)
+            val maxBitrate = _uiState.value.maxBitrate
+            preloader.start(channel.id, maxBitrate, jellyfinRepo.getStreamUrl(channel.id, userId, maxBitrate))
+        }
+    }
+
+    private fun cancelPreload() {
+        preloadStartJob?.cancel()
+        preloadStartJob = null
+        preloader.cancel()
     }
 
     private fun confirmChannelSwitch() {
@@ -1163,6 +1240,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { prefsRepo.saveFavoriteIds(updated.map { it.toString() }.toSet()) }
     }
 
+    private fun setPrebufferEnabled(enabled: Boolean) {
+        if (!enabled) cancelPreload()
+        _uiState.value = _uiState.value.copy(prebufferEnabled = enabled, prebufferAutoDisabled = false)
+        viewModelScope.launch { prefsRepo.savePrebuffer(enabled, autoDisabled = false) }
+    }
+
+    /** The server couldn't serve a second stream alongside the current one (see [PrebufferFailureTracker]). */
+    private fun disablePrebufferAutomatically() {
+        CrashReporting.addBreadcrumb("Pre-buffering turned off automatically after a failed preload", "playback")
+        cancelPreload()
+        _uiState.value = _uiState.value.copy(prebufferEnabled = false, prebufferAutoDisabled = true)
+        viewModelScope.launch { prefsRepo.savePrebuffer(enabled = false, autoDisabled = true) }
+    }
+
     fun setMaxBitrate(bitrate: Int?) {
         _uiState.value = _uiState.value.copy(maxBitrate = bitrate)
         viewModelScope.launch { prefsRepo.saveMaxBitrate(bitrate) }
@@ -1218,6 +1309,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         stopProgressReporting(_uiState.value.currentChannel?.id)
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
+        preloader.release()
         _uiState.value = _uiState.value.copy(isBuffering = false, error = null)
     }
 
@@ -1229,6 +1321,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     override fun onCleared() {
         stopProgressReporting(_uiState.value.currentChannel?.id)
+        preloader.release()
         exoPlayer.release()
     }
 }

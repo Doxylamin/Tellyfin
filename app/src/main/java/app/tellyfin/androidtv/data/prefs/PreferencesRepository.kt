@@ -5,6 +5,7 @@ import androidx.datastore.core.DataMigration
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -67,6 +68,8 @@ class PreferencesRepository(private val context: Context) {
         val LAST_CHANNEL_INDEX = intPreferencesKey("last_channel_index")
         val MAX_BITRATE = intPreferencesKey("max_bitrate")
         val FAVORITE_IDS = stringPreferencesKey("favorite_ids")
+        val PREBUFFER_ENABLED = booleanPreferencesKey("prebuffer_enabled")
+        val PREBUFFER_AUTO_DISABLED = booleanPreferencesKey("prebuffer_auto_disabled")
     }
 
     val serverUrl: Flow<String?> = context.dataStore.data.map { it[Keys.SERVER_URL] }
@@ -75,6 +78,8 @@ class PreferencesRepository(private val context: Context) {
     val username: Flow<String> = context.dataStore.data.map { it[Keys.USERNAME] ?: "" }
     val lastChannelIndex: Flow<Int> = context.dataStore.data.map { it[Keys.LAST_CHANNEL_INDEX] ?: 0 }
     val maxBitrate: Flow<Int?> = context.dataStore.data.map { it[Keys.MAX_BITRATE] }
+    val prebufferEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.PREBUFFER_ENABLED] ?: true }
+    val prebufferAutoDisabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.PREBUFFER_AUTO_DISABLED] ?: false }
     val favoriteIds: Flow<Set<String>> = context.dataStore.data.map {
         it[Keys.FAVORITE_IDS]?.split(",")?.filter { s -> s.isNotBlank() }?.toSet() ?: emptySet()
     }
@@ -98,6 +103,14 @@ class PreferencesRepository(private val context: Context) {
         context.dataStore.edit {
             if (bitrate == null) it.remove(Keys.MAX_BITRATE)
             else it[Keys.MAX_BITRATE] = bitrate
+        }
+    }
+
+    /** [autoDisabled] records that the app turned it off itself, so Settings can say why. */
+    suspend fun savePrebuffer(enabled: Boolean, autoDisabled: Boolean) {
+        context.dataStore.edit {
+            it[Keys.PREBUFFER_ENABLED] = enabled
+            it[Keys.PREBUFFER_AUTO_DISABLED] = autoDisabled
         }
     }
 

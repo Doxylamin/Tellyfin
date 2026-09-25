@@ -87,6 +87,11 @@
     <string name="settings_update_ready">OK to install</string>
     <string name="settings_update_error">Update check failed</string>
     <string name="settings_update_label">Update</string>
+    <string name="settings_prebuffer">Pre-buffer channels</string>
+    <string name="settings_prebuffer_hint">Starts loading a channel while its banner counts down, so the switch is instant. Briefly uses a second tuner.</string>
+    <string name="settings_prebuffer_auto_off_hint">Turned off automatically — your server couldn\'t open a second stream alongside the current one.</string>
+    <string name="settings_on">On</string>
+    <string name="settings_off">Off</string>
     <string name="settings_bandwidth_hint">Caps the stream quality — useful on slow connections. Auto lets the server decide.</string>
     <string name="settings_hint">↑↓ ← → Navigate  ·  OK Select  ·  BACK Close</string>
 
