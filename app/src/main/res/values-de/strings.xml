@@ -101,6 +101,7 @@
     <string name="settings_summary_account">Server, Abmelden</string>
     <string name="settings_summary_advanced">Timing, Diagnose</string>
     <string name="settings_hint_rail">↑↓ Bereich  ·  → / OK Öffnen  ·  ZURÜCK Schließen</string>
+    <string name="settings_hint_rail_browse">↑↓ Bereich  ·  ZURÜCK Schließen</string>
     <string name="settings_hint_pane">↑↓ Navigation  ·  OK Auswählen  ·  ← Zurück</string>
     <string name="keybinds_intro">Füge jeder Aktion eine zusätzliche Taste hinzu — die Standardtaste funktioniert weiterhin.</string>
     <string name="keybind_quick_menu">Schnellmenü</string>
@@ -121,10 +122,9 @@
     <string name="settings_prebuffer_delay_hint">Wie lange ein Kanal markiert sein muss, bevor er zu laden beginnt.</string>
     <string name="settings_countdown">Countdown</string>
     <string name="settings_countdown_hint">Wie lange das Wechsel-Banner herunterzählt. Auto: 5 s mit Vorpuffern, 3 s ohne.</string>
-    <string name="settings_countdown_auto">Auto</string>
     <string name="settings_countdown_auto_value">Auto (%s)</string>
-    <string name="settings_diagnostics">Diagnoseprotokolle senden</string>
-    <string name="settings_diagnostics_hint">Sendet ausführliche Protokolle an das Sentry des Entwicklers, um Probleme aufzuspüren.</string>
+    <string name="settings_diagnostics">Diagnosedaten senden</string>
+    <string name="settings_diagnostics_hint">Sendet ausführliche Protokolle und Fehlerberichte an das Sentry des Entwicklers, um Probleme aufzuspüren.</string>
     <string name="settings_restore_defaults">Standard wiederherstellen</string>
     <string name="settings_restore_defaults_hint">Setzt die Einstellungen dieser Seite zurück und entfernt alle hinzugefügten Tasten.</string>
 

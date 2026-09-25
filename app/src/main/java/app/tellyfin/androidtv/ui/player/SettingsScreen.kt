@@ -58,7 +58,14 @@ fun SettingsScreen(
                     SettingsPageContent(settings.page, state, context, focusedRow, serverUrl, appVersion)
                 }
                 Text(
-                    stringResource(if (settings.inPane) R.string.settings_hint_pane else R.string.settings_hint_rail),
+                    stringResource(
+                        when {
+                            settings.inPane -> R.string.settings_hint_pane
+                            // Nothing to open on this page (App in store builds) — don't offer it.
+                            settingsRows(settings.page, context).isEmpty() -> R.string.settings_hint_rail_browse
+                            else -> R.string.settings_hint_rail
+                        }
+                    ),
                     color = AppColors.OnSurface.copy(alpha = 0.30f),
                     fontSize = 11.sp
                 )

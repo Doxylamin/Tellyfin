@@ -101,6 +101,7 @@
     <string name="settings_summary_account">Server, sign out</string>
     <string name="settings_summary_advanced">Timing, diagnostics</string>
     <string name="settings_hint_rail">↑↓ Section  ·  → / OK Open  ·  BACK Close</string>
+    <string name="settings_hint_rail_browse">↑↓ Section  ·  BACK Close</string>
     <string name="settings_hint_pane">↑↓ Navigate  ·  OK Select  ·  ← Back</string>
     <string name="keybinds_intro">Add an extra button to any action — the standard button keeps working.</string>
     <string name="keybind_quick_menu">Quick menu</string>
@@ -121,10 +122,9 @@
     <string name="settings_prebuffer_delay_hint">How long a channel must stay highlighted before it starts loading.</string>
     <string name="settings_countdown">Countdown</string>
     <string name="settings_countdown_hint">How long the switch banner counts down. Auto: 5 s with pre-buffering, 3 s without.</string>
-    <string name="settings_countdown_auto">Auto</string>
     <string name="settings_countdown_auto_value">Auto (%s)</string>
-    <string name="settings_diagnostics">Send diagnostic logs</string>
-    <string name="settings_diagnostics_hint">Streams detailed logs to the developer\'s Sentry to help track down problems.</string>
+    <string name="settings_diagnostics">Send diagnostics</string>
+    <string name="settings_diagnostics_hint">Sends detailed logs and error reports to the developer\'s Sentry to help track down problems.</string>
     <string name="settings_restore_defaults">Restore defaults</string>
     <string name="settings_restore_defaults_hint">Resets the settings on this page and removes all added buttons.</string>
 
