@@ -18,6 +18,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.sp
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
@@ -31,6 +40,8 @@ fun PlayerScreen(
     onInstallApk: (java.io.File) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
+    // Where the guide overlay wants the playing video (null = full screen).
+    var videoSlot by remember { mutableStateOf<Rect?>(null) }
 
     LaunchedEffect(state.logoutRequested) {
         if (state.logoutRequested) onLogOut()
@@ -89,7 +100,8 @@ fun PlayerScreen(
 
             // Playback view
             else -> {
-                VideoPlayer(viewModel = viewModel)
+                // Same composable node either way, so the player view is resized, never re-attached.
+                VideoPlayer(viewModel = viewModel, slot = if (state.overlay is Overlay.Epg) videoSlot else null)
 
                 if (state.isBuffering) {
                     CircularProgressIndicator(
@@ -208,7 +220,9 @@ fun PlayerScreen(
             epgData = state.epgData,
             currentChannelIndex = state.currentIndex,
             highlightedRow = state.highlightedIndex,
-            visible = state.overlay is Overlay.Epg
+            visible = state.overlay is Overlay.Epg,
+            showVideoSlot = state.isPlaying,
+            onVideoSlotChanged = { videoSlot = it }
         )
 
         // Startup update prompt — sits above everything
@@ -235,9 +249,15 @@ fun PlayerScreen(
 }
 
 @Composable
-private fun VideoPlayer(viewModel: PlayerViewModel) {
+private fun VideoPlayer(viewModel: PlayerViewModel, slot: Rect?) {
     val context = LocalContext.current
     val view = LocalView.current
+    val density = LocalDensity.current
+    val placement = if (slot == null) Modifier.fillMaxSize() else with(density) {
+        Modifier
+            .offset { IntOffset(slot.left.roundToInt(), slot.top.roundToInt()) }
+            .size(slot.width.toDp(), slot.height.toDp())
+    }
     AndroidView(
         factory = {
             PlayerView(context).apply {
@@ -247,7 +267,7 @@ private fun VideoPlayer(viewModel: PlayerViewModel) {
                 isFocusableInTouchMode = false
             }
         },
-        modifier = Modifier.fillMaxSize()
+        modifier = placement
     )
     DisposableEffect(Unit) {
         view.keepScreenOn = true
