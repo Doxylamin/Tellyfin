@@ -4,17 +4,25 @@ import java.util.UUID
 
 /**
  * Timing for the channel-switch preview banner. With pre-buffering on, the countdown gets two
- * extra seconds: the first [START_DELAY_MS] are for reading the banner (flicking past a channel
- * never touches a tuner), the rest is spent loading the stream so the switch starts instantly.
- * Jellyfin can take several seconds to open a tuner, so the loading window gets the lion's share.
+ * extra seconds: the first part (the start delay) is for reading the banner — flicking past a
+ * channel never touches a tuner — the rest is spent loading the stream so the switch starts
+ * instantly. Jellyfin can take several seconds to open a tuner, so loading gets the lion's share.
+ * Both are user-adjustable under Settings → Advanced.
  */
 object Prebuffer {
-    const val START_DELAY_MS = 1_000L
+    const val DEFAULT_START_DELAY_MS = 1_000L
+    /** Countdown setting meaning "5 s with pre-buffering, 3 s without". */
+    const val COUNTDOWN_AUTO = 0L
+    val START_DELAY_OPTIONS = listOf(500L, DEFAULT_START_DELAY_MS, 2_000L)
+    val COUNTDOWN_OPTIONS = listOf(COUNTDOWN_AUTO, 3_000L, 5_000L, 7_000L)
     private const val COUNTDOWN_MS = 3_000L
     private const val COUNTDOWN_WITH_PREBUFFER_MS = 5_000L
 
-    fun countdownMs(enabled: Boolean): Long =
-        if (enabled) COUNTDOWN_WITH_PREBUFFER_MS else COUNTDOWN_MS
+    fun countdownMs(enabled: Boolean, setting: Long = COUNTDOWN_AUTO): Long = when {
+        setting != COUNTDOWN_AUTO -> setting
+        enabled -> COUNTDOWN_WITH_PREBUFFER_MS
+        else -> COUNTDOWN_MS
+    }
 }
 
 /**

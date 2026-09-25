@@ -12,11 +12,23 @@ class PrebufferTest {
     private val channelB = UUID.randomUUID()
 
     @Test
-    fun `countdown is longer with prebuffering so there is time to preload after the reading pause`() {
+    fun `auto countdown is longer with prebuffering so there is time to preload after the reading pause`() {
         assertEquals(5_000L, Prebuffer.countdownMs(enabled = true))
         assertEquals(3_000L, Prebuffer.countdownMs(enabled = false))
-        assertEquals(1_000L, Prebuffer.START_DELAY_MS)
-        assertEquals(4_000L, Prebuffer.countdownMs(enabled = true) - Prebuffer.START_DELAY_MS)
+        assertEquals(1_000L, Prebuffer.DEFAULT_START_DELAY_MS)
+    }
+
+    @Test
+    fun `an explicit countdown setting wins over auto either way`() {
+        assertEquals(7_000L, Prebuffer.countdownMs(enabled = true, setting = 7_000L))
+        assertEquals(7_000L, Prebuffer.countdownMs(enabled = false, setting = 7_000L))
+        assertEquals(5_000L, Prebuffer.countdownMs(enabled = true, setting = Prebuffer.COUNTDOWN_AUTO))
+    }
+
+    @Test
+    fun `the defaults are among the offered options`() {
+        assertEquals(listOf(500L, 1_000L, 2_000L), Prebuffer.START_DELAY_OPTIONS)
+        assertEquals(listOf(Prebuffer.COUNTDOWN_AUTO, 3_000L, 5_000L, 7_000L), Prebuffer.COUNTDOWN_OPTIONS)
     }
 
     @Test

@@ -1153,7 +1153,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         if (!state.prebufferEnabled || index == state.currentIndex) return
         preloadStartJob = viewModelScope.launch {
             // Only once the highlight has rested: flicking past channels never opens a tuner.
-            delay(Prebuffer.START_DELAY_MS)
+            delay(Prebuffer.DEFAULT_START_DELAY_MS)
             val maxBitrate = _uiState.value.maxBitrate
             preloader.start(channel.id, maxBitrate, jellyfinRepo.getStreamUrl(channel.id, userId, maxBitrate))
         }
