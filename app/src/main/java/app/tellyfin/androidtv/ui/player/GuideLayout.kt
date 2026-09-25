@@ -39,7 +39,12 @@ fun guideBlocks(
     val windowEndSec = windowStartSec + windowMinutes * 60L
     val sorted = programs.withIndex().sortedBy { it.value.startTime }
     return sorted.mapIndexedNotNull { position, (index, program) ->
-        val nextStartSec = sorted.getOrNull(position + 1)?.value?.startTime?.epochSecond ?: Long.MAX_VALUE
+        // Of several entries starting at the same moment only the first is drawn — it's the one
+        // "what's on now" lookups (first match in list order) will focus.
+        if (position > 0 && sorted[position - 1].value.startTime == program.startTime) return@mapIndexedNotNull null
+        val nextStartSec = sorted.drop(position + 1)
+            .firstOrNull { it.value.startTime > program.startTime }
+            ?.value?.startTime?.epochSecond ?: Long.MAX_VALUE
         val startSec = maxOf(program.startTime.epochSecond, windowStartSec)
         val endSec = minOf(program.endTime.epochSecond, windowEndSec, nextStartSec)
         if (endSec <= startSec) null
@@ -78,3 +83,25 @@ fun guideHeroProgram(programs: List<Program>, focusedIndex: Int?, now: Instant):
         ?: programs.firstOrNull { it.startTime <= now && it.endTime > now }
         ?: programs.firstOrNull { it.startTime > now }
         ?: programs.firstOrNull()
+
+/**
+ * D-pad Left/Right in the guide: steps to the previous/next programme that is actually drawn, so
+ * focus never lands on one that ended before the window or on a hidden duplicate. If focus is on
+ * such a programme already, it moves to the nearest drawn one in that direction.
+ */
+fun guideStepFocus(programs: List<Program>, windowStart: Instant, current: Int, delta: Int): Int {
+    val blocks = guideBlocks(programs, windowStart)
+    if (blocks.isEmpty()) return current
+    val position = blocks.indexOfFirst { it.index == current }
+    val target = if (position >= 0) {
+        (position + delta).coerceIn(0, blocks.lastIndex)
+    } else {
+        val reference = programs.getOrNull(current)?.startTime
+        when {
+            reference == null -> 0
+            delta > 0 -> blocks.indexOfFirst { it.program.startTime > reference }.takeIf { it >= 0 } ?: blocks.lastIndex
+            else -> blocks.indexOfLast { it.program.startTime < reference }.takeIf { it >= 0 } ?: 0
+        }
+    }
+    return blocks[target].index
+}

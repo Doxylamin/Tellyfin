@@ -603,17 +603,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     true
                 }
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    val n = (state.epgFocusedBlockIndex - 1).coerceAtLeast(0)
-                    _uiState.value = state.copy(epgFocusedBlockIndex = n)
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                // Only ever step between programmes the guide actually draws — ones that ended
+                // before its window, or hidden duplicates, would take focus somewhere invisible.
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     val programs = state.highlightedChannel
                         ?.let { state.epgData[it.id.toString()] }.orEmpty()
-                    val maxIdx = (programs.size - 1).coerceAtLeast(0)
+                    val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
                     _uiState.value = state.copy(
-                        epgFocusedBlockIndex = (state.epgFocusedBlockIndex + 1).coerceAtMost(maxIdx)
+                        epgFocusedBlockIndex = guideStepFocus(
+                            programs, guideWindowStart(java.time.Instant.now()), state.epgFocusedBlockIndex, delta
+                        )
                     )
                     true
                 }

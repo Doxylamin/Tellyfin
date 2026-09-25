@@ -61,9 +61,31 @@ class GuideLayoutTest {
     }
 
     @Test
-    fun `same-start duplicates collapse to one block`() {
-        val blocks = guideBlocks(listOf(program("a", 10, 40), program("a again", 10, 40)), at(0))
-        assertEquals(1, blocks.size)
+    fun `same-start duplicates collapse to the first one`() {
+        val blocks = guideBlocks(listOf(program("a", 10, 40), program("a again", 10, 40), program("b", 40, 60)), at(0))
+        assertEquals(listOf(0 to (10f to 40f), 2 to (40f to 60f)), blocks.map { it.index to (it.startMin to it.endMin) })
+    }
+
+    @Test
+    fun `stepping left stops at the first drawn programme, not ended ones before the window`() {
+        // "earlier" is partly inside the window (drawn from 0 to 5); "long gone" ended before it.
+        val programs = listOf(program("long gone", -120, -50), program("earlier", -50, 5), program("now", 5, 30), program("next", 30, 60))
+        assertEquals(1, guideStepFocus(programs, at(0), current = 2, delta = -1))
+        assertEquals(1, guideStepFocus(programs, at(0), current = 1, delta = -1))
+    }
+
+    @Test
+    fun `stepping right skips duplicates that aren't drawn`() {
+        val programs = listOf(program("a", 10, 40), program("a again", 10, 40), program("b", 40, 60))
+        assertEquals(2, guideStepFocus(programs, at(0), current = 0, delta = 1))
+        assertEquals(2, guideStepFocus(programs, at(0), current = 2, delta = 1), "stays on the last one")
+    }
+
+    @Test
+    fun `focus on something not drawn lands on the nearest drawn programme`() {
+        val programs = listOf(program("ended", -50, -10), program("now", -10, 30), program("next", 30, 60))
+        assertEquals(1, guideStepFocus(programs, at(0), current = 0, delta = 1))
+        assertEquals(1, guideStepFocus(programs, at(0), current = 0, delta = -1))
     }
 
     @Test

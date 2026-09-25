@@ -85,11 +85,14 @@ fun EpgOverlay(
                 onVideoSlotChanged(null)
             }
         }
+        // Only cut the video's hole while it's actually in there: on close the video returns to
+        // full screen at once, while this still fades out on top of it.
+        val holeActive = visible && showVideoSlot
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .drawBehind {
-                    val s = slot
+                    val s = if (holeActive) slot else null
                     val bg = AppColors.Background
                     if (s == null) {
                         drawRect(bg)

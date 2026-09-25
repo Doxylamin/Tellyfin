@@ -206,9 +206,10 @@ fun GuideGrid(
     val totalWidth = (GUIDE_WINDOW_MINUTES * GUIDE_PX_PER_MIN).dp
     val nowX = (guideMinutesSince(windowStart, now) * GUIDE_PX_PER_MIN).dp
     val hScroll = rememberScrollState()
-    val listState = rememberLazyListState()
-
     val highlightedIndex = channels.indexOfFirst { it.id == highlightedChannelId }
+    // Start already at the highlighted channel: the overlay creates a fresh grid every time it
+    // opens, and animating there from the top of ~1300 channels is a visible jump each time.
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (highlightedIndex - 2).coerceAtLeast(0))
     LaunchedEffect(highlightedIndex, isFocused) {
         if (isFocused && highlightedIndex >= 0) {
             listState.animateScrollToItem((highlightedIndex - 2).coerceAtLeast(0))
