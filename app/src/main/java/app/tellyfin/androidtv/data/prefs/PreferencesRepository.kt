@@ -153,7 +153,19 @@ class PreferencesRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.FAVORITE_IDS] = ids.joinToString(",") }
     }
 
+    /**
+     * Signing out forgets the account and what only makes sense on its server (favourites and
+     * the last channel are server-specific ids). Device settings — bandwidth, pre-buffering,
+     * timing, keybinds, diagnostics — stay, since they belong to the TV, not the account.
+     */
     suspend fun clearSession() {
-        context.dataStore.edit { it.clear() }
+        context.dataStore.edit {
+            it.remove(Keys.SERVER_URL)
+            it.remove(Keys.ACCESS_TOKEN)
+            it.remove(Keys.USER_ID)
+            it.remove(Keys.USERNAME)
+            it.remove(Keys.LAST_CHANNEL_INDEX)
+            it.remove(Keys.FAVORITE_IDS)
+        }
     }
 }

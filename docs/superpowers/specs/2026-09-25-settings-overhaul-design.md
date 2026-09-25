@@ -93,6 +93,11 @@ Unknown action names or bad numbers are ignored on load.
 Preferences: `prebuffer_delay_ms` (long), `countdown_ms` (long, 0 = Auto),
 `diagnostics_enabled` (bool), `keybinds` (string).
 
+Signing out removes only the account (server, token, user) and server-specific data
+(favourites, last channel). All device settings above, plus bandwidth and pre-buffering,
+survive a sign-out. Stored delay/countdown values that aren't among the offered options load
+as the defaults; KEYCODE_UNKNOWN is reserved; a just-bound button is ignored until released.
+
 ## Code structure
 
 - `Keybinds.kt` — pure: `KeyAction` enum with defaults and labels, `Keybinds`
