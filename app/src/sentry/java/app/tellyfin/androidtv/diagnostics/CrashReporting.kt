@@ -9,7 +9,14 @@ import io.sentry.android.core.SentryAndroid
 /** The `sentry` flavor's implementation — the only place io.sentry.* is referenced. */
 object CrashReporting {
 
-    private val verbose = BuildConfig.DEBUG || BuildConfig.PRERELEASE
+    /** This flavor can send diagnostic logs, so Settings offers the switch. */
+    const val SUPPORTS_DIAGNOSTICS = true
+
+    // Set from Settings → Advanced once prefs are read; early-startup lines only reach Sentry
+    // in debug/beta builds.
+    @Volatile private var diagnosticsOptIn = false
+
+    private val verbose get() = BuildConfig.DEBUG || BuildConfig.PRERELEASE || diagnosticsOptIn
 
     fun init(application: Application) {
         SentryAndroid.init(application) { options ->
@@ -20,19 +27,22 @@ object CrashReporting {
                 else -> "release"
             }
             options.release = "tellyfin@${BuildConfig.VERSION_NAME}"
-            // Logs stream to the dashboard continuously, independent of any captured event —
-            // fine for debug/beta diagnosis, too verbose (and too much real-user telemetry) to
-            // leave on for every routine action in a release build.
-            options.logs.isEnabled = verbose
+            // Log streaming is gated per call via [verbose] (debug, beta, or the user's opt-in),
+            // so it can be switched on at runtime without re-initialising Sentry.
+            options.logs.isEnabled = true
         }
+    }
+
+    fun setDiagnosticsEnabled(enabled: Boolean) {
+        diagnosticsOptIn = enabled
     }
 
     fun addBreadcrumb(message: String, category: String) {
         Sentry.addBreadcrumb(message, category)
-        Sentry.logger().info(message)
+        if (verbose) Sentry.logger().info(message)
     }
 
-    /** Streams a diagnostic log line to Sentry — debug/beta builds only, a no-op in releases. */
+    /** Streams a diagnostic log line to Sentry — debug/beta builds or opted-in users only. */
     fun log(message: String) {
         if (verbose) Sentry.logger().info(message)
     }

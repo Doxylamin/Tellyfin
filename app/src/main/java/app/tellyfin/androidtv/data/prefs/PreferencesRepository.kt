@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.tellyfin.androidtv.diagnostics.CrashReporting
@@ -70,6 +71,10 @@ class PreferencesRepository(private val context: Context) {
         val FAVORITE_IDS = stringPreferencesKey("favorite_ids")
         val PREBUFFER_ENABLED = booleanPreferencesKey("prebuffer_enabled")
         val PREBUFFER_AUTO_DISABLED = booleanPreferencesKey("prebuffer_auto_disabled")
+        val KEYBINDS = stringPreferencesKey("keybinds")
+        val PREBUFFER_DELAY_MS = longPreferencesKey("prebuffer_delay_ms")
+        val COUNTDOWN_MS = longPreferencesKey("countdown_ms")
+        val DIAGNOSTICS_ENABLED = booleanPreferencesKey("diagnostics_enabled")
     }
 
     val serverUrl: Flow<String?> = context.dataStore.data.map { it[Keys.SERVER_URL] }
@@ -80,6 +85,10 @@ class PreferencesRepository(private val context: Context) {
     val maxBitrate: Flow<Int?> = context.dataStore.data.map { it[Keys.MAX_BITRATE] }
     val prebufferEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.PREBUFFER_ENABLED] ?: true }
     val prebufferAutoDisabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.PREBUFFER_AUTO_DISABLED] ?: false }
+    val keybinds: Flow<String?> = context.dataStore.data.map { it[Keys.KEYBINDS] }
+    val prebufferDelayMs: Flow<Long?> = context.dataStore.data.map { it[Keys.PREBUFFER_DELAY_MS] }
+    val countdownMs: Flow<Long?> = context.dataStore.data.map { it[Keys.COUNTDOWN_MS] }
+    val diagnosticsEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.DIAGNOSTICS_ENABLED] ?: false }
     val favoriteIds: Flow<Set<String>> = context.dataStore.data.map {
         it[Keys.FAVORITE_IDS]?.split(",")?.filter { s -> s.isNotBlank() }?.toSet() ?: emptySet()
     }
@@ -111,6 +120,32 @@ class PreferencesRepository(private val context: Context) {
         context.dataStore.edit {
             it[Keys.PREBUFFER_ENABLED] = enabled
             it[Keys.PREBUFFER_AUTO_DISABLED] = autoDisabled
+        }
+    }
+
+    suspend fun saveKeybinds(serialized: String) {
+        context.dataStore.edit { it[Keys.KEYBINDS] = serialized }
+    }
+
+    suspend fun savePrebufferDelayMs(ms: Long) {
+        context.dataStore.edit { it[Keys.PREBUFFER_DELAY_MS] = ms }
+    }
+
+    suspend fun saveCountdownMs(ms: Long) {
+        context.dataStore.edit { it[Keys.COUNTDOWN_MS] = ms }
+    }
+
+    suspend fun saveDiagnosticsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.DIAGNOSTICS_ENABLED] = enabled }
+    }
+
+    /** Settings → Advanced → Restore defaults: that page's settings plus every added button. */
+    suspend fun clearAdvancedSettings() {
+        context.dataStore.edit {
+            it.remove(Keys.KEYBINDS)
+            it.remove(Keys.PREBUFFER_DELAY_MS)
+            it.remove(Keys.COUNTDOWN_MS)
+            it.remove(Keys.DIAGNOSTICS_ENABLED)
         }
     }
 

@@ -8,6 +8,11 @@ import android.app.Application
  * by a runtime flag.
  */
 object CrashReporting {
+    /** Nothing here can send anything, so Settings hides the diagnostic-logs switch. */
+    const val SUPPORTS_DIAGNOSTICS = false
+
+    fun setDiagnosticsEnabled(enabled: Boolean) {}
+
     fun init(application: Application) {}
 
     fun addBreadcrumb(message: String, category: String) {}
