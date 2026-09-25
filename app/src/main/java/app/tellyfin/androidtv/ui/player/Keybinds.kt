@@ -22,8 +22,13 @@ sealed interface CaptureResult {
     data class Conflict(val action: KeyAction) : CaptureResult
 }
 
-/** Buttons the app depends on (navigation, digits) or the system owns (volume, power, home). */
+/**
+ * Buttons the app depends on (navigation, digits) or the system owns (volume, power, home), plus
+ * UNKNOWN: remotes that report all their odd buttons as UNKNOWN would otherwise fire one action
+ * from every one of them.
+ */
 val RESERVED_KEYS: Set<Int> = setOf(
+    KeyEvent.KEYCODE_UNKNOWN,
     KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
     KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
     KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BACK,

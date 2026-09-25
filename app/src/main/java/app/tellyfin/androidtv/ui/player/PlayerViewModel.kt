@@ -232,6 +232,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var streamRetryCount = 0
     private var userId: String = ""
     private var preloadStartJob: Job? = null
+    private val keyRepeatGuard = KeyRepeatGuard()
     // Diagnostics only: how long a switch takes to reach STATE_READY, logged under TellyfinPreload.
     private var switchStartedAtMs: Long? = null
     private var switchUsedPreload = false
@@ -282,8 +283,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 val prebufferEnabled = prefsRepo.prebufferEnabled.first()
                 val prebufferAutoDisabled = prefsRepo.prebufferAutoDisabled.first()
                 val keybinds = Keybinds.parse(prefsRepo.keybinds.first())
-                val prebufferDelayMs = prefsRepo.prebufferDelayMs.first() ?: Prebuffer.DEFAULT_START_DELAY_MS
-                val countdownSettingMs = prefsRepo.countdownMs.first() ?: Prebuffer.COUNTDOWN_AUTO
+                val prebufferDelayMs = Prebuffer.sanitizeStartDelay(prefsRepo.prebufferDelayMs.first())
+                val countdownSettingMs = Prebuffer.sanitizeCountdown(prefsRepo.countdownMs.first())
                 val diagnosticsEnabled = prefsRepo.diagnosticsEnabled.first()
                 CrashReporting.setDiagnosticsEnabled(diagnosticsEnabled)
                 val favIds = prefsRepo.favoriteIds.first()
@@ -430,6 +431,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         if (state.overlay is Overlay.Settings && state.settings.capture != null) {
             return handleSettingsKeys(rawKeyCode, state)
         }
+        if (keyRepeatGuard.shouldSwallow(rawKeyCode)) return true
         val keyCode = state.keybinds.resolve(rawKeyCode)
 
         if (keyCode == KeyEvent.KEYCODE_BACK) return handleBack(state)
@@ -878,6 +880,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 viewModelScope.launch { prefsRepo.saveCountdownMs(command.ms) }
             }
             is SettingsCommand.SetExtraKey -> {
+                command.keyCode?.let(keyRepeatGuard::arm)
                 val keybinds = state.keybinds.withExtra(command.action, command.keyCode)
                 _uiState.value = state.copy(keybinds = keybinds)
                 viewModelScope.launch { prefsRepo.saveKeybinds(keybinds.serialize()) }

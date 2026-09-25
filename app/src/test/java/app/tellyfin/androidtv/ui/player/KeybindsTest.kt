@@ -28,7 +28,9 @@ class KeybindsTest {
         listOf(
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_VOLUME_UP,
-            KeyEvent.KEYCODE_VOLUME_MUTE, KeyEvent.KEYCODE_POWER, KeyEvent.KEYCODE_HOME
+            KeyEvent.KEYCODE_VOLUME_MUTE, KeyEvent.KEYCODE_POWER, KeyEvent.KEYCODE_HOME,
+            // Remotes that report every odd button as UNKNOWN would otherwise all trigger one action.
+            KeyEvent.KEYCODE_UNKNOWN
         ).forEach { key ->
             assertEquals(CaptureResult.Reserved, keybinds.validate(KeyAction.LIVE_GUIDE, key), "keycode $key")
         }

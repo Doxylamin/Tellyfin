@@ -26,6 +26,18 @@ class PrebufferTest {
     }
 
     @Test
+    fun `missing or corrupt stored timing falls back to the defaults`() {
+        assertEquals(Prebuffer.DEFAULT_START_DELAY_MS, Prebuffer.sanitizeStartDelay(null))
+        assertEquals(Prebuffer.DEFAULT_START_DELAY_MS, Prebuffer.sanitizeStartDelay(-1L))
+        assertEquals(Prebuffer.DEFAULT_START_DELAY_MS, Prebuffer.sanitizeStartDelay(60_000L))
+        assertEquals(500L, Prebuffer.sanitizeStartDelay(500L))
+        assertEquals(Prebuffer.COUNTDOWN_AUTO, Prebuffer.sanitizeCountdown(null))
+        assertEquals(Prebuffer.COUNTDOWN_AUTO, Prebuffer.sanitizeCountdown(1L))
+        assertEquals(Prebuffer.COUNTDOWN_AUTO, Prebuffer.sanitizeCountdown(-5_000L))
+        assertEquals(7_000L, Prebuffer.sanitizeCountdown(7_000L))
+    }
+
+    @Test
     fun `the defaults are among the offered options`() {
         assertEquals(listOf(500L, 1_000L, 2_000L), Prebuffer.START_DELAY_OPTIONS)
         assertEquals(listOf(Prebuffer.COUNTDOWN_AUTO, 3_000L, 5_000L, 7_000L), Prebuffer.COUNTDOWN_OPTIONS)

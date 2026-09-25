@@ -18,6 +18,13 @@ object Prebuffer {
     private const val COUNTDOWN_MS = 3_000L
     private const val COUNTDOWN_WITH_PREBUFFER_MS = 5_000L
 
+    /** Stored values are only trusted if they're one we offer — anything else is a default. */
+    fun sanitizeStartDelay(stored: Long?): Long =
+        stored?.takeIf { it in START_DELAY_OPTIONS } ?: DEFAULT_START_DELAY_MS
+
+    fun sanitizeCountdown(stored: Long?): Long =
+        stored?.takeIf { it in COUNTDOWN_OPTIONS } ?: COUNTDOWN_AUTO
+
     fun countdownMs(enabled: Boolean, setting: Long = COUNTDOWN_AUTO): Long = when {
         setting != COUNTDOWN_AUTO -> setting
         enabled -> COUNTDOWN_WITH_PREBUFFER_MS
