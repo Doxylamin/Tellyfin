@@ -191,6 +191,15 @@ class SettingsNavigatorTest {
     }
 
     @Test
+    fun `volume still works while waiting for a button to bind`() {
+        val capturing = SettingsState(page = SettingsPage.KEYBINDS, inPane = true, row = 2, capture = CaptureState(KeyAction.LIVE_GUIDE))
+        val result = press(capturing, KeyEvent.KEYCODE_VOLUME_UP)
+        assertFalse(result.handled)
+        assertEquals(CaptureMessage.Reserved, result.state.capture?.message)
+        assertNull(result.command)
+    }
+
+    @Test
     fun `action rows emit their commands`() {
         assertEquals(SettingsCommand.SignOut, press(SettingsState(page = SettingsPage.ACCOUNT, inPane = true), ok).command)
         assertEquals(SettingsCommand.ActivateUpdate, press(SettingsState(page = SettingsPage.APP, inPane = true), ok).command)

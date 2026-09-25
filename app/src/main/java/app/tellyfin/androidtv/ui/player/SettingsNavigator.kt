@@ -188,7 +188,11 @@ object SettingsNavigator {
         PickerKind.COUNTDOWN -> SettingsCommand.PickCountdown(Prebuffer.COUNTDOWN_OPTIONS[picker.index])
     }
 
-    /** Every key is consumed here: the dialog is literally asking for "the next button". */
+    private val VOLUME_KEYS = setOf(
+        KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE
+    )
+
+    /** Every key but volume is consumed here: the dialog is asking for "the next button". */
     private fun onCaptureKey(
         state: SettingsState,
         capture: CaptureState,
@@ -201,8 +205,12 @@ object SettingsNavigator {
         else -> when (val result = keybinds.validate(capture.action, keyCode)) {
             CaptureResult.Accepted ->
                 SettingsResult(state.copy(capture = null), SettingsCommand.SetExtraKey(capture.action, keyCode))
-            CaptureResult.Reserved ->
-                SettingsResult(state.copy(capture = capture.copy(message = CaptureMessage.Reserved)))
+            // Volume still has to work while the dialog waits — say it can't be bound, but let
+            // the system have it too.
+            CaptureResult.Reserved -> SettingsResult(
+                state.copy(capture = capture.copy(message = CaptureMessage.Reserved)),
+                handled = keyCode !in VOLUME_KEYS
+            )
             is CaptureResult.Conflict ->
                 SettingsResult(state.copy(capture = capture.copy(message = CaptureMessage.Conflict(keyCode, result.action))))
         }
