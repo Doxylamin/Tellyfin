@@ -64,16 +64,10 @@ fun PlayerScreen(
             // Settings full-screen overlay (can be reached from QuickMenu or home)
             state.overlay is Overlay.Settings -> {
                 SettingsScreen(
+                    state = state,
+                    context = viewModel.settingsContext,
                     serverUrl = viewModel.jellyfinRepo.baseUrl,
-                    username = state.username,
-                    currentBitrate = state.maxBitrate,
-                    prebufferEnabled = state.prebufferEnabled,
-                    prebufferAutoDisabled = state.prebufferAutoDisabled,
-                    highlightedIndex = state.highlightedMenuIndex,
-                    updateStatus = state.updateStatus,
                     appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.FLAVOR})",
-                    bitratePickerOpen = state.bitratePickerOpen,
-                    bitratePickerIndex = state.bitratePickerIndex,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -126,7 +120,7 @@ fun PlayerScreen(
                         channel = channel,
                         visible = isBannerVisible,
                         isPreview = isPreview,
-                        countdownMs = Prebuffer.countdownMs(state.prebufferEnabled),
+                        countdownMs = Prebuffer.countdownMs(state.prebufferEnabled, state.countdownSettingMs),
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }

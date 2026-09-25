@@ -76,11 +76,6 @@ const val NAV_LIVE     = 1
 const val NAV_SEARCH   = 2
 const val NAV_SETTINGS = 3
 
-// Settings screen focus targets (highlightedMenuIndex while Overlay.Settings is open)
-const val SETTINGS_FOCUS_BANDWIDTH = 0  // Streaming card, top-left
-const val SETTINGS_FOCUS_UPDATE    = 1  // App card, top-right
-const val SETTINGS_FOCUS_LOGOUT    = 2  // Account card, bottom
-const val SETTINGS_FOCUS_PREBUFFER = 3  // Streaming card, below bandwidth
 
 data class PlayerUiState(
     val isLoadingChannels: Boolean = true,
@@ -100,6 +95,12 @@ data class PlayerUiState(
     val prebufferEnabled: Boolean = true,
     /** Set when the app turned pre-buffering off itself, so Settings can explain why. */
     val prebufferAutoDisabled: Boolean = false,
+    val prebufferDelayMs: Long = Prebuffer.DEFAULT_START_DELAY_MS,
+    /** Prebuffer.COUNTDOWN_AUTO or an explicit countdown in ms. */
+    val countdownSettingMs: Long = Prebuffer.COUNTDOWN_AUTO,
+    val diagnosticsEnabled: Boolean = false,
+    val keybinds: Keybinds = Keybinds(),
+    val settings: SettingsState = SettingsState(),
     val homeFocusSection: Int = HOME_SECTION_EPG,
     val homeNavTabIndex: Int = NAV_LIVE,
     val nowPlayingCardIndex: Int = 0,
@@ -114,8 +115,6 @@ data class PlayerUiState(
     val searchFieldFocused: Boolean = true,
     val updateStatus: UpdateStatus = UpdateStatus.Idle,
     val pendingInstallFile: File? = null,
-    val bitratePickerOpen: Boolean = false,
-    val bitratePickerIndex: Int = 0,
     /** 0 = Install now, 1 = Later */
     val updatePromptButtonIndex: Int = 0,
     val serverName: String? = null,
@@ -165,6 +164,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val prefsRepo = PreferencesRepository(application)
     val jellyfinRepo = JellyfinRepository(application)
     private val updateChecker = UpdateChecker(application)
+    val settingsContext = SettingsContext(
+        selfUpdateEnabled = BuildConfig.SELF_UPDATE_ENABLED,
+        diagnosticsAvailable = CrashReporting.SUPPORTS_DIAGNOSTICS
+    )
 
     // Streams authenticate via Authorization header (set once prefs are read in init),
     // keeping the access token out of URLs on the publicly exposed server.
@@ -278,6 +281,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 val maxBitrate = prefsRepo.maxBitrate.first()
                 val prebufferEnabled = prefsRepo.prebufferEnabled.first()
                 val prebufferAutoDisabled = prefsRepo.prebufferAutoDisabled.first()
+                val keybinds = Keybinds.parse(prefsRepo.keybinds.first())
+                val prebufferDelayMs = prefsRepo.prebufferDelayMs.first() ?: Prebuffer.DEFAULT_START_DELAY_MS
+                val countdownSettingMs = prefsRepo.countdownMs.first() ?: Prebuffer.COUNTDOWN_AUTO
+                val diagnosticsEnabled = prefsRepo.diagnosticsEnabled.first()
+                CrashReporting.setDiagnosticsEnabled(diagnosticsEnabled)
                 val favIds = prefsRepo.favoriteIds.first()
                     .mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() }
                     .toSet()
@@ -292,6 +300,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     maxBitrate = maxBitrate,
                     prebufferEnabled = prebufferEnabled,
                     prebufferAutoDisabled = prebufferAutoDisabled,
+                    keybinds = keybinds,
+                    prebufferDelayMs = prebufferDelayMs,
+                    countdownSettingMs = countdownSettingMs,
+                    diagnosticsEnabled = diagnosticsEnabled,
                     favoriteChannelIds = favIds,
                     username = username,
                     loadingStatus = "Loading channels…"
@@ -410,8 +422,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     // ── Key dispatch ────────────────────────────────────────────────────────
 
-    fun handleKeyEvent(keyCode: Int): Boolean {
+    fun handleKeyEvent(rawKeyCode: Int): Boolean {
         val state = _uiState.value
+
+        // The capture dialog needs the button exactly as pressed (including Back and Search);
+        // everywhere else a user-added button stands in for its action's standard one.
+        if (state.overlay is Overlay.Settings && state.settings.capture != null) {
+            return handleSettingsKeys(rawKeyCode, state)
+        }
+        val keyCode = state.keybinds.resolve(rawKeyCode)
 
         if (keyCode == KeyEvent.KEYCODE_BACK) return handleBack(state)
 
@@ -439,10 +458,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun handleBack(state: PlayerUiState): Boolean {
         return when {
-            state.bitratePickerOpen -> {
-                _uiState.value = state.copy(bitratePickerOpen = false)
-                true
-            }
+            state.overlay is Overlay.Settings -> handleSettingsKeys(KeyEvent.KEYCODE_BACK, state)
             state.overlay is Overlay.Search -> { clearSearch(); true }
             state.overlay is Overlay.ChannelDetails -> {
                 val chIdx = (state.overlay as Overlay.ChannelDetails).channelIndex
@@ -827,75 +843,64 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleSettingsKeys(keyCode: Int, state: PlayerUiState): Boolean {
-        if (state.bitratePickerOpen) {
-            return when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP -> {
-                    _uiState.value = state.copy(
-                        bitratePickerIndex = (state.bitratePickerIndex - 1 + BITRATE_OPTIONS.size) % BITRATE_OPTIONS.size
-                    )
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    _uiState.value = state.copy(
-                        bitratePickerIndex = (state.bitratePickerIndex + 1) % BITRATE_OPTIONS.size
-                    )
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    setMaxBitrate(BITRATE_OPTIONS[state.bitratePickerIndex].first)
-                    _uiState.value = _uiState.value.copy(bitratePickerOpen = false)
-                    true
-                }
-                else -> false
+        val result = SettingsNavigator.onKey(
+            state.settings,
+            keyCode,
+            settingsContext,
+            SettingsValues(state.maxBitrate, state.prebufferDelayMs, state.countdownSettingMs, state.keybinds)
+        )
+        _uiState.value = _uiState.value.copy(settings = result.state)
+        result.command?.let(::runSettingsCommand)
+        return result.handled
+    }
+
+    private fun runSettingsCommand(command: SettingsCommand) {
+        val state = _uiState.value
+        when (command) {
+            SettingsCommand.Close ->
+                _uiState.value = state.copy(overlay = Overlay.None, settings = SettingsState())
+            SettingsCommand.TogglePrebuffer -> setPrebufferEnabled(!state.prebufferEnabled)
+            SettingsCommand.ToggleDiagnostics -> setDiagnosticsEnabled(!state.diagnosticsEnabled)
+            SettingsCommand.ActivateUpdate -> when (val status = state.updateStatus) {
+                is UpdateStatus.Available -> downloadUpdate(status.version)
+                UpdateStatus.ReadyToInstall -> triggerInstall()
+                else -> Unit
+            }
+            SettingsCommand.SignOut -> logOut()
+            SettingsCommand.RestoreDefaults -> restoreAdvancedDefaults()
+            is SettingsCommand.PickBitrate -> setMaxBitrate(command.bitrate)
+            is SettingsCommand.PickPrebufferDelay -> {
+                _uiState.value = state.copy(prebufferDelayMs = command.ms)
+                viewModelScope.launch { prefsRepo.savePrebufferDelayMs(command.ms) }
+            }
+            is SettingsCommand.PickCountdown -> {
+                _uiState.value = state.copy(countdownSettingMs = command.ms)
+                viewModelScope.launch { prefsRepo.saveCountdownMs(command.ms) }
+            }
+            is SettingsCommand.SetExtraKey -> {
+                val keybinds = state.keybinds.withExtra(command.action, command.keyCode)
+                _uiState.value = state.copy(keybinds = keybinds)
+                viewModelScope.launch { prefsRepo.saveKeybinds(keybinds.serialize()) }
             }
         }
-        // Card grid: Streaming card (top-left) holds SETTINGS_FOCUS_BANDWIDTH above
-        // SETTINGS_FOCUS_PREBUFFER, SETTINGS_FOCUS_UPDATE (top-right), SETTINGS_FOCUS_LOGOUT (bottom row)
-        fun focus(index: Int) { _uiState.value = state.copy(highlightedMenuIndex = index) }
-        return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (state.highlightedMenuIndex == SETTINGS_FOCUS_UPDATE) focus(SETTINGS_FOCUS_BANDWIDTH)
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (state.highlightedMenuIndex == SETTINGS_FOCUS_BANDWIDTH ||
-                    state.highlightedMenuIndex == SETTINGS_FOCUS_PREBUFFER
-                ) focus(SETTINGS_FOCUS_UPDATE)
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                when (state.highlightedMenuIndex) {
-                    SETTINGS_FOCUS_LOGOUT -> focus(SETTINGS_FOCUS_PREBUFFER)
-                    SETTINGS_FOCUS_PREBUFFER -> focus(SETTINGS_FOCUS_BANDWIDTH)
-                }
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                when (state.highlightedMenuIndex) {
-                    SETTINGS_FOCUS_BANDWIDTH -> focus(SETTINGS_FOCUS_PREBUFFER)
-                    SETTINGS_FOCUS_PREBUFFER, SETTINGS_FOCUS_UPDATE -> focus(SETTINGS_FOCUS_LOGOUT)
-                }
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                when (state.highlightedMenuIndex) {
-                    SETTINGS_FOCUS_BANDWIDTH -> {
-                        val currentIdx = BITRATE_OPTIONS.indexOfFirst { it.first == state.maxBitrate }
-                            .takeIf { it >= 0 } ?: 0
-                        _uiState.value = state.copy(bitratePickerOpen = true, bitratePickerIndex = currentIdx)
-                    }
-                    SETTINGS_FOCUS_UPDATE -> when (state.updateStatus) {
-                        is UpdateStatus.Available -> downloadUpdate((state.updateStatus as UpdateStatus.Available).version)
-                        UpdateStatus.ReadyToInstall -> triggerInstall()
-                        else -> Unit
-                    }
-                    SETTINGS_FOCUS_PREBUFFER -> setPrebufferEnabled(!state.prebufferEnabled)
-                    SETTINGS_FOCUS_LOGOUT -> logOut()
-                }
-                true
-            }
-            else -> false
-        }
+    }
+
+    private fun setDiagnosticsEnabled(enabled: Boolean) {
+        CrashReporting.setDiagnosticsEnabled(enabled)
+        _uiState.value = _uiState.value.copy(diagnosticsEnabled = enabled)
+        viewModelScope.launch { prefsRepo.saveDiagnosticsEnabled(enabled) }
+    }
+
+    /** Settings → Advanced → Restore defaults; bandwidth, pre-buffer on/off and account stay. */
+    private fun restoreAdvancedDefaults() {
+        CrashReporting.setDiagnosticsEnabled(false)
+        _uiState.value = _uiState.value.copy(
+            prebufferDelayMs = Prebuffer.DEFAULT_START_DELAY_MS,
+            countdownSettingMs = Prebuffer.COUNTDOWN_AUTO,
+            diagnosticsEnabled = false,
+            keybinds = Keybinds()
+        )
+        viewModelScope.launch { prefsRepo.clearAdvancedSettings() }
     }
 
     private fun currentProgramIndex(channelId: UUID, epgData: Map<String, List<Program>>): Int {
@@ -906,7 +911,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun openSettings() {
-        _uiState.value = _uiState.value.copy(overlay = Overlay.Settings, highlightedMenuIndex = 0, bitratePickerOpen = false)
+        _uiState.value = _uiState.value.copy(overlay = Overlay.Settings, settings = SettingsState())
         checkForUpdate()
     }
 
@@ -1145,7 +1150,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(highlightedIndex = index, overlay = Overlay.ChannelBanner)
         val state = _uiState.value
         bannerDismissJob = viewModelScope.launch {
-            delay(Prebuffer.countdownMs(state.prebufferEnabled))
+            delay(Prebuffer.countdownMs(state.prebufferEnabled, state.countdownSettingMs))
             if (_uiState.value.overlay is Overlay.ChannelBanner) confirmChannelSwitch()
         }
         val channel = state.channels.getOrNull(index) ?: return
@@ -1153,7 +1158,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         if (!state.prebufferEnabled || index == state.currentIndex) return
         preloadStartJob = viewModelScope.launch {
             // Only once the highlight has rested: flicking past channels never opens a tuner.
-            delay(Prebuffer.DEFAULT_START_DELAY_MS)
+            delay(state.prebufferDelayMs)
             val maxBitrate = _uiState.value.maxBitrate
             preloader.start(channel.id, maxBitrate, jellyfinRepo.getStreamUrl(channel.id, userId, maxBitrate))
         }
@@ -1203,7 +1208,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun dismissOverlay() {
-        _uiState.value = _uiState.value.copy(overlay = Overlay.None, bitratePickerOpen = false)
+        _uiState.value = _uiState.value.copy(overlay = Overlay.None, settings = SettingsState())
     }
 
     fun showChannelBanner() {

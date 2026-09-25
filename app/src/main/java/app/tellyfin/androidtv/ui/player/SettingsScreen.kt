@@ -4,426 +4,293 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.tellyfin.androidtv.R
 import app.tellyfin.androidtv.ui.theme.AppColors
 
-// Focus map (highlightedIndex): SETTINGS_FOCUS_BANDWIDTH / SETTINGS_FOCUS_PREBUFFER = Streaming
-// card, SETTINGS_FOCUS_UPDATE = App card, SETTINGS_FOCUS_LOGOUT = Account card.
-// Key handling lives in PlayerViewModel.handleSettingsKeys.
+// Paged settings, modelled on Android TV's own: a rail of pages on the left, the selected
+// page's rows on the right. Key handling lives in SettingsNavigator; this only draws state.
 
 @Composable
 fun SettingsScreen(
+    state: PlayerUiState,
+    context: SettingsContext,
     serverUrl: String,
-    username: String,
-    currentBitrate: Int?,
-    prebufferEnabled: Boolean,
-    prebufferAutoDisabled: Boolean,
-    highlightedIndex: Int,
-    updateStatus: UpdateStatus = UpdateStatus.Idle,
-    appVersion: String = "",
-    bitratePickerOpen: Boolean = false,
-    bitratePickerIndex: Int = 0,
+    appVersion: String,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(AppColors.Background),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(modifier = Modifier.width(860.dp)) {
-            // Header: title left, signed-in identity right
-            Row(
+    val settings = state.settings
+    val focusedRow = if (settings.inPane) settingsRows(settings.page, context).getOrNull(settings.row) else null
+
+    Box(modifier = modifier.fillMaxSize().background(AppColors.Background)) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            SettingsRail(
+                selected = settings.page,
+                railFocused = !settings.inPane,
+                modifier = Modifier.width(320.dp).fillMaxHeight()
+            )
+            Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.06f)))
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 28.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(horizontal = 48.dp, vertical = 40.dp)
             ) {
                 Text(
-                    stringResource(R.string.settings),
+                    stringResource(settings.page.titleRes),
                     color = Color.White,
-                    fontSize = 28.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.weight(1f))
-                if (username.isNotBlank()) {
-                    Text(
-                        username,
-                        color = AppColors.OnSurface.copy(alpha = 0.45f),
-                        fontSize = 13.sp
-                    )
+                Spacer(Modifier.height(24.dp))
+                Box(modifier = Modifier.weight(1f)) {
+                    SettingsPageContent(settings.page, state, context, focusedRow, serverUrl, appVersion)
                 }
+                Text(
+                    stringResource(if (settings.inPane) R.string.settings_hint_pane else R.string.settings_hint_rail),
+                    color = AppColors.OnSurface.copy(alpha = 0.30f),
+                    fontSize = 11.sp
+                )
             }
-
-            // Top row: Streaming + App cards side by side
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Max),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                SettingsCard(
-                    title = stringResource(R.string.settings_section_streaming),
-                    isActive = highlightedIndex == SETTINGS_FOCUS_BANDWIDTH ||
-                        highlightedIndex == SETTINGS_FOCUS_PREBUFFER,
-                    modifier = Modifier.weight(1f).fillMaxHeight()
-                ) {
-                    ActionRow(
-                        label = stringResource(R.string.settings_bandwidth),
-                        isFocused = highlightedIndex == SETTINGS_FOCUS_BANDWIDTH
-                    ) {
-                        val currentLabel = BITRATE_OPTIONS
-                            .firstOrNull { it.first == currentBitrate }?.second
-                            ?: BITRATE_OPTIONS.first().second
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                currentLabel,
-                                color = if (highlightedIndex == SETTINGS_FOCUS_BANDWIDTH) AppColors.Purple
-                                else AppColors.OnSurface.copy(alpha = 0.80f),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                "›",
-                                color = if (highlightedIndex == SETTINGS_FOCUS_BANDWIDTH) AppColors.Purple
-                                else AppColors.OnSurface.copy(alpha = 0.35f),
-                                fontSize = 16.sp
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        stringResource(R.string.settings_bandwidth_hint),
-                        color = AppColors.OnSurface.copy(alpha = 0.35f),
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    ActionRow(
-                        label = stringResource(R.string.settings_prebuffer),
-                        isFocused = highlightedIndex == SETTINGS_FOCUS_PREBUFFER
-                    ) {
-                        Text(
-                            stringResource(if (prebufferEnabled) R.string.settings_on else R.string.settings_off),
-                            color = if (highlightedIndex == SETTINGS_FOCUS_PREBUFFER) AppColors.Purple
-                            else AppColors.OnSurface.copy(alpha = 0.80f),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        stringResource(
-                            if (prebufferAutoDisabled) R.string.settings_prebuffer_auto_off_hint
-                            else R.string.settings_prebuffer_hint
-                        ),
-                        color = if (prebufferAutoDisabled) AppColors.Red.copy(alpha = 0.70f)
-                        else AppColors.OnSurface.copy(alpha = 0.35f),
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp
-                    )
-                }
-
-                SettingsCard(
-                    title = stringResource(R.string.settings_section_app),
-                    isActive = highlightedIndex == SETTINGS_FOCUS_UPDATE,
-                    modifier = Modifier.weight(1f).fillMaxHeight()
-                ) {
-                    InfoLine(
-                        label = stringResource(R.string.settings_version),
-                        value = if (appVersion.isNotBlank()) "v$appVersion" else "—"
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    ActionRow(
-                        label = stringResource(R.string.settings_update_label),
-                        isFocused = highlightedIndex == SETTINGS_FOCUS_UPDATE
-                    ) {
-                        UpdateStatusValue(updateStatus)
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Bottom: Account card, full width
-            SettingsCard(
-                title = stringResource(R.string.settings_section_account),
-                isActive = highlightedIndex == SETTINGS_FOCUS_LOGOUT,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        InfoLine(
-                            label = stringResource(R.string.settings_server),
-                            value = serverUrl.ifBlank { "—" }
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        InfoLine(
-                            label = stringResource(R.string.settings_username_label),
-                            value = username.ifBlank { "—" }
-                        )
-                    }
-                    SignOutButton(isFocused = highlightedIndex == SETTINGS_FOCUS_LOGOUT)
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            Text(
-                stringResource(R.string.settings_hint),
-                color = AppColors.OnSurface.copy(alpha = 0.30f),
-                fontSize = 11.sp
-            )
         }
 
-        if (bitratePickerOpen) {
-            BitratePickerDialog(bitratePickerIndex)
-        }
+        settings.picker?.let { PickerDialog(it, state.prebufferEnabled) }
+        settings.capture?.let { CaptureDialog(it, state.keybinds) }
     }
 }
 
-// ── Building blocks ───────────────────────────────────────────────────────────
+private val SettingsPage.titleRes: Int
+    get() = when (this) {
+        SettingsPage.STREAMING -> R.string.settings_section_streaming
+        SettingsPage.KEYBINDS -> R.string.settings_section_keybinds
+        SettingsPage.APP -> R.string.settings_section_app
+        SettingsPage.ACCOUNT -> R.string.settings_section_account
+        SettingsPage.ADVANCED -> R.string.settings_section_advanced
+    }
 
-/** Section card; the whole card lifts slightly when its action is focused. */
+private val SettingsPage.summaryRes: Int
+    get() = when (this) {
+        SettingsPage.STREAMING -> R.string.settings_summary_streaming
+        SettingsPage.KEYBINDS -> R.string.settings_summary_keybinds
+        SettingsPage.APP -> R.string.settings_summary_app
+        SettingsPage.ACCOUNT -> R.string.settings_summary_account
+        SettingsPage.ADVANCED -> R.string.settings_summary_advanced
+    }
+
+private val SettingsPage.iconRes: Int
+    get() = when (this) {
+        SettingsPage.STREAMING -> R.drawable.ic_settings_streaming
+        SettingsPage.KEYBINDS -> R.drawable.ic_settings_remote
+        SettingsPage.APP -> R.drawable.ic_settings_app
+        SettingsPage.ACCOUNT -> R.drawable.ic_settings_account
+        SettingsPage.ADVANCED -> R.drawable.ic_settings_advanced
+    }
+
 @Composable
-private fun SettingsCard(
-    title: String,
-    isActive: Boolean,
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isActive) Color(0xFF1C1C30) else Color(0xFF151522))
-            .border(
-                1.dp,
-                if (isActive) AppColors.Purple.copy(alpha = 0.35f)
-                else Color.White.copy(alpha = 0.06f),
-                RoundedCornerShape(12.dp)
-            )
-            .padding(20.dp)
-    ) {
+private fun SettingsRail(selected: SettingsPage, railFocused: Boolean, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.padding(horizontal = 16.dp, vertical = 40.dp)) {
         Text(
-            title,
-            color = if (isActive) AppColors.Purple else AppColors.Purple.copy(alpha = 0.60f),
-            fontSize = 11.sp,
+            stringResource(R.string.settings),
+            color = Color.White,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp,
-            modifier = Modifier.padding(bottom = 14.dp)
+            modifier = Modifier.padding(start = 12.dp, bottom = 28.dp)
         )
-        content()
+        SettingsPage.entries.forEach { page ->
+            RailItem(page, isSelected = page == selected, isFocused = railFocused && page == selected)
+            Spacer(Modifier.height(4.dp))
+        }
     }
 }
 
-/** Read-only label/value pair — visually flat so it can't be mistaken for a button. */
+/** Focused (rail has focus) = purple highlight; selected while the pane has focus = subtle. */
 @Composable
-private fun InfoLine(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            label,
-            color = AppColors.OnSurface.copy(alpha = 0.45f),
-            fontSize = 13.sp
-        )
-        Spacer(Modifier.width(16.dp))
-        Text(
-            value,
-            color = AppColors.OnSurface.copy(alpha = 0.85f),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-/** Focusable label/value row — bordered pill so actionable rows stand out. */
-@Composable
-private fun ActionRow(
-    label: String,
-    isFocused: Boolean,
-    value: @Composable () -> Unit
-) {
+private fun RailItem(page: SettingsPage, isSelected: Boolean, isFocused: Boolean) {
+    val shape = RoundedCornerShape(10.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (isFocused) Modifier
-                    .background(AppColors.Purple.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
-                    .border(1.dp, AppColors.Purple, RoundedCornerShape(8.dp))
-                else Modifier
-                    .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+                when {
+                    isFocused -> Modifier
+                        .background(AppColors.Purple.copy(alpha = 0.14f), shape)
+                        .border(1.dp, AppColors.Purple.copy(alpha = 0.50f), shape)
+                    isSelected -> Modifier.background(Color.White.copy(alpha = 0.05f), shape)
+                    else -> Modifier
+                }
             )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .background(
+                    if (isFocused) AppColors.Purple.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.06f),
+                    RoundedCornerShape(8.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(page.iconRes),
+                contentDescription = null,
+                tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.55f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column {
+            Text(
+                stringResource(page.titleRes),
+                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.75f),
+                fontSize = 14.sp,
+                fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal
+            )
+            Text(
+                stringResource(page.summaryRes),
+                color = Color.White.copy(alpha = 0.38f),
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun DialogFrame(content: @Composable ColumnScope.() -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.72f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .width(380.dp)
+                .background(AppColors.Surface, RoundedCornerShape(12.dp))
+                .border(1.dp, AppColors.OnSurface.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                .padding(20.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun PickerDialog(picker: PickerState, prebufferEnabled: Boolean) {
+    val title = stringResource(
+        when (picker.kind) {
+            PickerKind.BANDWIDTH -> R.string.settings_bandwidth
+            PickerKind.PREBUFFER_DELAY -> R.string.settings_prebuffer_delay
+            PickerKind.COUNTDOWN -> R.string.settings_countdown
+        }
+    )
+    val options = when (picker.kind) {
+        PickerKind.BANDWIDTH -> BITRATE_OPTIONS.map { it.second }
+        PickerKind.PREBUFFER_DELAY -> Prebuffer.START_DELAY_OPTIONS.map(::formatSeconds)
+        PickerKind.COUNTDOWN -> Prebuffer.COUNTDOWN_OPTIONS.map { countdownLabel(it, prebufferEnabled) }
+    }
+    DialogFrame {
+        Text(
+            title,
+            color = Color.White,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 14.dp)
+        )
+        options.forEachIndexed { idx, label ->
+            PickerOption(label, isHighlighted = idx == picker.index)
+            if (idx < options.lastIndex) Spacer(Modifier.height(3.dp))
+        }
+    }
+}
+
+@Composable
+private fun PickerOption(label: String, isHighlighted: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (isHighlighted) Modifier
+                    .background(AppColors.Purple.copy(alpha = 0.22f), RoundedCornerShape(6.dp))
+                    .border(1.dp, AppColors.Purple, RoundedCornerShape(6.dp))
+                else Modifier
+            )
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             label,
-            color = if (isFocused) Color.White else AppColors.OnSurface.copy(alpha = 0.70f),
+            color = if (isHighlighted) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.75f),
             fontSize = 14.sp,
-            fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal
+            fontWeight = if (isHighlighted) FontWeight.SemiBold else FontWeight.Normal
         )
-        value()
+        if (isHighlighted) Text("●", color = AppColors.Purple, fontSize = 8.sp)
     }
 }
 
 @Composable
-private fun SignOutButton(isFocused: Boolean) {
-    Box(
-        modifier = Modifier
-            .then(
-                if (isFocused) Modifier
-                    .background(AppColors.Red.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
-                    .border(1.dp, AppColors.Red.copy(alpha = 0.70f), RoundedCornerShape(8.dp))
-                else Modifier
-                    .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+private fun CaptureDialog(capture: CaptureState, keybinds: Keybinds) {
+    DialogFrame {
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                painter = painterResource(R.drawable.ic_settings_remote),
+                contentDescription = null,
+                tint = AppColors.Purple,
+                modifier = Modifier.size(32.dp)
             )
-            .padding(horizontal = 24.dp, vertical = 12.dp)
-    ) {
-        Text(
-            stringResource(R.string.settings_logout),
-            color = if (isFocused) AppColors.Red else AppColors.OnSurface.copy(alpha = 0.65f),
-            fontSize = 14.sp,
-            fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal
-        )
-    }
-}
-
-@Composable
-private fun UpdateStatusValue(updateStatus: UpdateStatus) {
-    when (updateStatus) {
-        UpdateStatus.Idle ->
-            Text("—", color = AppColors.OnSurface.copy(alpha = 0.55f), fontSize = 13.sp)
-        UpdateStatus.UpToDate ->
+            Spacer(Modifier.height(10.dp))
             Text(
-                stringResource(R.string.settings_update_up_to_date),
-                color = AppColors.OnSurface.copy(alpha = 0.55f), fontSize = 13.sp
-            )
-        UpdateStatus.Checking ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CircularProgressIndicator(
-                    color = AppColors.Purple.copy(alpha = 0.60f),
-                    trackColor = Color.Transparent,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    stringResource(R.string.settings_update_checking),
-                    color = AppColors.OnSurface.copy(alpha = 0.45f), fontSize = 12.sp
-                )
-            }
-        is UpdateStatus.Available ->
-            Text(
-                stringResource(R.string.settings_update_available, updateStatus.version),
-                color = AppColors.Purple, fontSize = 13.sp, fontWeight = FontWeight.SemiBold
-            )
-        is UpdateStatus.Downloading ->
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    stringResource(R.string.settings_update_downloading, updateStatus.progress),
-                    color = AppColors.Purple.copy(alpha = 0.80f), fontSize = 12.sp
-                )
-                Spacer(Modifier.height(4.dp))
-                LinearProgressIndicator(
-                    progress = { updateStatus.progress / 100f },
-                    modifier = Modifier.width(120.dp).height(3.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                    color = AppColors.Purple,
-                    trackColor = Color.White.copy(alpha = 0.12f)
-                )
-            }
-        UpdateStatus.ReadyToInstall ->
-            Text(
-                stringResource(R.string.settings_update_ready),
-                color = AppColors.Purple, fontSize = 13.sp, fontWeight = FontWeight.SemiBold
-            )
-        is UpdateStatus.Error ->
-            Text(
-                stringResource(R.string.settings_update_error),
-                color = AppColors.Red.copy(alpha = 0.80f), fontSize = 12.sp
-            )
-    }
-}
-
-@Composable
-private fun BitratePickerDialog(bitratePickerIndex: Int) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.72f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .width(300.dp)
-                .background(AppColors.Surface, RoundedCornerShape(12.dp))
-                .border(1.dp, AppColors.OnSurface.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                .padding(vertical = 20.dp, horizontal = 20.dp)
-        ) {
-            Text(
-                stringResource(R.string.settings_bandwidth),
+                stringResource(R.string.keybind_capture_title),
                 color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 14.dp)
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
             )
-            BITRATE_OPTIONS.forEachIndexed { idx, (_, label) ->
-                val isHighlighted = idx == bitratePickerIndex
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (isHighlighted) Modifier
-                                .background(AppColors.Purple.copy(alpha = 0.22f), RoundedCornerShape(6.dp))
-                                .border(1.dp, AppColors.Purple, RoundedCornerShape(6.dp))
-                            else Modifier
+            Text(
+                stringResource(capture.action.labelRes),
+                color = AppColors.Purple,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(12.dp))
+            KeyChips(capture.action, keybinds)
+            capture.message?.let { message ->
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    when (message) {
+                        CaptureMessage.Reserved -> stringResource(R.string.keybind_capture_reserved)
+                        is CaptureMessage.Conflict -> stringResource(
+                            R.string.keybind_capture_conflict,
+                            keyLabel(message.keyCode),
+                            stringResource(message.owner.labelRes)
                         )
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        label,
-                        color = if (isHighlighted) AppColors.Purple else AppColors.OnSurface.copy(alpha = 0.75f),
-                        fontSize = 14.sp,
-                        fontWeight = if (isHighlighted) FontWeight.SemiBold else FontWeight.Normal
-                    )
-                    if (isHighlighted) {
-                        Text("●", color = AppColors.Purple, fontSize = 8.sp)
-                    }
-                }
-                if (idx < BITRATE_OPTIONS.size - 1) Spacer(Modifier.height(3.dp))
+                    },
+                    color = AppColors.Red,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center
+                )
             }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                stringResource(R.string.keybind_capture_not_passed),
+                color = AppColors.OnSurface.copy(alpha = 0.45f),
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.keybind_capture_keys),
+                color = AppColors.OnSurface.copy(alpha = 0.60f),
+                fontSize = 11.sp
+            )
         }
     }
 }
