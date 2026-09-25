@@ -12,6 +12,10 @@
     <string name="epg_title">Program Guide</string>
     <string name="epg_ok_hint">OK: Switch channel</string>
     <string name="epg_on_now">On now</string>
+    <string name="guide_remaining">%d min left</string>
+    <string name="guide_starts_in">in %d min</string>
+    <string name="guide_ended">ended</string>
+    <string name="guide_home_hint">OK Watch  ·  MENU Options  ·  ← → Time  ·  ↑↓ Channels</string>
 
     <!-- Channel context menu (MENU key on EPG row) -->
     <string name="context_play">Play</string>
