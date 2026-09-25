@@ -90,7 +90,7 @@ Unknown action names or bad numbers are ignored on load.
 - Restore defaults: resets the Advanced settings above plus all keybinds. Does
   not touch bandwidth, pre-buffer on/off, or the account.
 
-Preferences: `prebuffer_delay_ms` (int), `countdown_ms` (int, 0 = Auto),
+Preferences: `prebuffer_delay_ms` (long), `countdown_ms` (long, 0 = Auto),
 `diagnostics_enabled` (bool), `keybinds` (string).
 
 ## Code structure
